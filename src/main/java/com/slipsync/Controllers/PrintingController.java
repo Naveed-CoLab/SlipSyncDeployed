@@ -3,6 +3,7 @@ package com.slipsync.Controllers;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.slipsync.Entities.*;
 import com.slipsync.Repositories.*;
+import com.slipsync.Services.StoreContextService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,23 +23,31 @@ public class PrintingController {
     private final PrintJobRepository jobRepository;
     private final UserRepository userRepository;
     private final OrderRepository orderRepository;
+    private final StoreContextService storeContextService;
     private final ObjectMapper objectMapper; // To convert Order to JSON payload
 
     public PrintingController(PrintDeviceRepository deviceRepository,
                               PrintJobRepository jobRepository,
                               UserRepository userRepository,
                               OrderRepository orderRepository,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper,
+                              StoreContextService storeContextService) {
         this.deviceRepository = deviceRepository;
         this.jobRepository = jobRepository;
         this.userRepository = userRepository;
         this.orderRepository = orderRepository;
         this.objectMapper = objectMapper;
+        this.storeContextService = storeContextService;
     }
 
     private User getCurrentUser(HttpServletRequest request) {
         String clerkId = (String) request.getAttribute("clerk.userId");
-        return userRepository.findByClerkUserId(clerkId).orElse(null);
+        return userRepository.findByClerkUserId(clerkId)
+                .map(user -> {
+                    storeContextService.attachStore(user, request);
+                    return user;
+                })
+                .orElse(null);
     }
 
     // --- 1. HEARTBEAT (Called by Local Agent) ---

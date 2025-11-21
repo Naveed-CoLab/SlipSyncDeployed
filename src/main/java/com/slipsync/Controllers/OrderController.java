@@ -1,14 +1,18 @@
 package com.slipsync.Controllers;
 
+import com.slipsync.DTO.OrderSummaryDto;
 import com.slipsync.Entities.*;
 import com.slipsync.Repositories.*;
+import com.slipsync.Services.StoreContextService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -23,6 +27,7 @@ public class OrderController {
     private final InventoryRepository inventoryRepository;
     private final CustomerRepository customerRepository;
     private final UserRepository userRepository;
+    private final StoreContextService storeContextService;
 
     public OrderController(OrderRepository orderRepository,
             OrderItemRepository orderItemRepository,
@@ -30,7 +35,8 @@ public class OrderController {
             ProductVariantRepository variantRepository,
             InventoryRepository inventoryRepository,
             CustomerRepository customerRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            StoreContextService storeContextService) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.invoiceRepository = invoiceRepository;
@@ -38,11 +44,17 @@ public class OrderController {
         this.inventoryRepository = inventoryRepository;
         this.customerRepository = customerRepository;
         this.userRepository = userRepository;
+        this.storeContextService = storeContextService;
     }
 
     private User getCurrentUser(HttpServletRequest request) {
         String clerkId = (String) request.getAttribute("clerk.userId");
-        return userRepository.findByClerkUserId(clerkId).orElse(null);
+        return userRepository.findByClerkUserId(clerkId)
+                .map(user -> {
+                    storeContextService.attachStore(user, request);
+                    return user;
+                })
+                .orElse(null);
     }
 
     // --- GET ORDERS ---
@@ -55,7 +67,36 @@ public class OrderController {
             return ResponseEntity.status(400).body("No store assigned");
 
         List<Order> orders = orderRepository.findByStoreIdOrderByPlacedAtDesc(user.getStore().getId());
-        return ResponseEntity.ok(orders);
+
+        List<OrderSummaryDto> response = orders.stream()
+                .map(order -> {
+                    long itemCount = orderItemRepository.countByOrderId(order.getId());
+                    String customerName = order.getCustomer() != null
+                            ? (order.getCustomer().getName() != null ? order.getCustomer().getName() : "Customer")
+                            : "Walk-in";
+                    String currency = order.getStore() != null && order.getStore().getCurrency() != null
+                            ? order.getStore().getCurrency()
+                            : user.getMerchant().getCurrency();
+
+                    BigDecimal subtotal = order.getSubtotal() != null ? order.getSubtotal() : BigDecimal.ZERO;
+                    BigDecimal taxes = order.getTaxesTotal() != null ? order.getTaxesTotal() : BigDecimal.ZERO;
+                    BigDecimal total = order.getTotalAmount() != null ? order.getTotalAmount() : subtotal.add(taxes);
+
+                    return new OrderSummaryDto(
+                            order.getId(),
+                            order.getOrderNumber(),
+                            order.getStatus(),
+                            subtotal,
+                            taxes,
+                            total,
+                            order.getPlacedAt(),
+                            customerName,
+                            (int) itemCount,
+                            currency);
+                })
+                .toList();
+
+        return ResponseEntity.ok(response);
     }
 
     // --- CREATE ORDER (Billing) ---
@@ -68,6 +109,9 @@ public class OrderController {
         Store currentStore = user.getStore();
         if (currentStore == null)
             return ResponseEntity.status(400).body("No store assigned to user");
+        if (!hasPosAccess(user)) {
+            return ResponseEntity.status(403).body("Forbidden: role cannot process orders");
+        }
 
         try {
             // 1. Create Order Object
@@ -75,7 +119,8 @@ public class OrderController {
             order.setMerchant(user.getMerchant());
             order.setStore(currentStore);
             order.setOrderNumber("ORD-" + System.currentTimeMillis()); // Simple generator
-            order.setStatus("paid"); // Assuming immediate payment for MVP
+            String status = payload.getOrDefault("status", "paid").toString();
+            order.setStatus(status);
 
             // Handle Customer (Optional)
             if (payload.containsKey("customerId") && payload.get("customerId") != null) {
@@ -86,13 +131,25 @@ public class OrderController {
 
             Order savedOrder = orderRepository.save(order);
 
-            BigDecimal orderTotal = BigDecimal.ZERO;
+            BigDecimal subtotal = BigDecimal.ZERO;
+            @SuppressWarnings("unchecked")
             List<Map<String, Object>> items = (List<Map<String, Object>>) payload.get("items");
+            if (items == null || items.isEmpty()) {
+                return ResponseEntity.status(400).body("Order items are required");
+            }
 
             // 2. Process Items
             for (Map<String, Object> itemData : items) {
-                UUID variantId = UUID.fromString((String) itemData.get("productVariantId"));
-                Integer qty = (Integer) itemData.get("quantity");
+                Object variantObj = itemData.get("productVariantId");
+                Object qtyObj = itemData.get("quantity");
+                if (variantObj == null || qtyObj == null) {
+                    return ResponseEntity.status(400).body("Each line item must include productVariantId and quantity");
+                }
+                UUID variantId = UUID.fromString(variantObj.toString());
+                int qty = Integer.parseInt(qtyObj.toString());
+                if (qty <= 0) {
+                    return ResponseEntity.status(400).body("Quantity must be greater than zero");
+                }
 
                 ProductVariant variant = variantRepository.findById(variantId)
                         .orElseThrow(() -> new RuntimeException("Variant not found: " + variantId));
@@ -102,13 +159,18 @@ public class OrderController {
                 orderItem.setOrder(savedOrder);
                 orderItem.setVariant(variant);
                 orderItem.setQuantity(qty);
-                orderItem.setUnitPrice(variant.getPrice());
+                BigDecimal unitPrice = itemData.containsKey("unitPrice") && itemData.get("unitPrice") != null
+                        ? new BigDecimal(itemData.get("unitPrice").toString())
+                        : variant.getPrice();
+                orderItem.setUnitPrice(unitPrice);
 
-                BigDecimal lineTotal = variant.getPrice().multiply(new BigDecimal(qty));
+                BigDecimal lineTotal = unitPrice.multiply(new BigDecimal(qty));
                 orderItem.setTotalPrice(lineTotal);
+                orderItem.setDiscountsTotal(BigDecimal.ZERO);
+                orderItem.setTaxesTotal(BigDecimal.ZERO);
 
                 orderItemRepository.save(orderItem);
-                orderTotal = orderTotal.add(lineTotal);
+                subtotal = subtotal.add(lineTotal);
 
                 // B. Decrement Inventory
                 Inventory inventory = inventoryRepository.findByStoreIdAndVariantId(currentStore.getId(), variantId)
@@ -124,17 +186,45 @@ public class OrderController {
             }
 
             // 3. Finalize Order Totals
-            savedOrder.setSubtotal(orderTotal);
-            // Tax logic can be added here later (e.g. orderTotal * 0.10)
-            savedOrder.setTotalAmount(orderTotal);
+            BigDecimal discountAmount = payload.containsKey("discountAmount") && payload.get("discountAmount") != null
+                    ? new BigDecimal(payload.get("discountAmount").toString())
+                    : BigDecimal.ZERO;
+            if (discountAmount.compareTo(BigDecimal.ZERO) < 0) {
+                discountAmount = BigDecimal.ZERO;
+            }
+            if (discountAmount.compareTo(subtotal) > 0) {
+                discountAmount = subtotal;
+            }
+
+            BigDecimal taxRate = payload.containsKey("taxRate") && payload.get("taxRate") != null
+                    ? new BigDecimal(payload.get("taxRate").toString())
+                    : BigDecimal.ZERO;
+            if (taxRate.compareTo(BigDecimal.ZERO) < 0) {
+                taxRate = BigDecimal.ZERO;
+            }
+            BigDecimal taxableBase = subtotal.subtract(discountAmount);
+            if (taxableBase.compareTo(BigDecimal.ZERO) < 0) {
+                taxableBase = BigDecimal.ZERO;
+            }
+            BigDecimal taxes = taxableBase.multiply(taxRate).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            BigDecimal total = taxableBase.add(taxes);
+
+            savedOrder.setSubtotal(subtotal);
+            savedOrder.setDiscountsTotal(discountAmount);
+            savedOrder.setTaxesTotal(taxes);
+            savedOrder.setTotalAmount(total);
+            savedOrder.setCurrency(currentStore.getCurrency() != null ? currentStore.getCurrency()
+                    : user.getMerchant().getCurrency());
             orderRepository.save(savedOrder);
 
             // 4. Generate Invoice Record
             Invoice invoice = new Invoice();
             invoice.setOrder(savedOrder);
             invoice.setMerchant(user.getMerchant());
+            invoice.setStore(currentStore);
             invoice.setInvoiceNumber("INV-" + savedOrder.getOrderNumber());
-            invoice.setTotal(orderTotal);
+            invoice.setTotal(total);
+            invoice.setCurrency(savedOrder.getCurrency());
             invoiceRepository.save(invoice);
 
             return ResponseEntity.ok(savedOrder);
@@ -144,5 +234,13 @@ public class OrderController {
             // roll back on error
             return ResponseEntity.status(400).body("Order failed: " + e.getMessage());
         }
+    }
+
+    private boolean hasPosAccess(User user) {
+        if (user == null || user.getRole() == null || user.getRole().getName() == null) {
+            return false;
+        }
+        String role = user.getRole().getName().toUpperCase(Locale.ROOT);
+        return role.equals("ADMIN") || role.equals("EMPLOYEE");
     }
 }

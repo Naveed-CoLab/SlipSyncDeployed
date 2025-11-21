@@ -18,6 +18,15 @@ public class Store {
     @Column(nullable = false)
     private String name;
 
+    @Column(name = "address")
+    private String address;
+
+    @Column(name = "phone")
+    private String phone;
+
+    @Column(name = "timezone")
+    private String timezone;
+
     @ManyToOne
     @JoinColumn(name = "merchant_id", nullable = false)
     private Merchant merchant;

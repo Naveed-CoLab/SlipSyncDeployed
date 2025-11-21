@@ -21,51 +21,98 @@ public class ClerkAuthFilter implements Filter {
     @Value("${clerk.secret.key:${CLERK_SECRET_KEY}}")
     private String clerkSecretKey;
 
-    // optional: restrict allowed token types, e.g. oauth_token for M2M
-    // private List<String> accepts = Collections.singletonList("id_token");
-
     @Override
     public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain) throws IOException, ServletException {
         var request = (HttpServletRequest) req;
         var response = (HttpServletResponse) res;
 
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Missing Authorization header");
+        // --- Basic CORS handling so that even error responses include the header ---
+        String origin = request.getHeader("Origin");
+        if (origin != null && origin.equals("http://localhost:5173")) {
+            response.setHeader("Access-Control-Allow-Origin", origin);
+            response.setHeader("Vary", "Origin");
+            response.setHeader("Access-Control-Allow-Credentials", "true");
+            response.setHeader("Access-Control-Allow-Headers", "Authorization, X-Clerk-Org-Id, X-Clerk-Org-Role, X-Clerk-Store-Access, X-Store-Id, x-store-id, Content-Type");
+            response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        }
+
+        // Allow CORS preflight requests to pass through without auth
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            response.setStatus(HttpServletResponse.SC_OK);
             return;
         }
-        System.out.println("secret key = "+clerkSecretKey);
+
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            System.out.println("❌ AUTH FAILED: Missing or invalid Authorization header");
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("text/plain");
+            response.getWriter().write("Missing Authorization header");
+            return;
+        }
         
         String token = authHeader.substring(7);
+        System.out.println("🔑 Validating token (first 20 chars): " + token.substring(0, Math.min(20, token.length())));
+        
+        // TEMPORARY FIX FOR DEVELOPMENT: Skip token validation if clock skew issues
+        // In production, make sure your server time is synchronized
+        boolean skipValidation = System.getProperty("clerk.skip.validation", "false").equals("true");
+        
+        if (skipValidation) {
+            System.out.println("⚠️  WARNING: Token validation skipped (development mode only)");
+            // Extract user ID from token without validation (UNSAFE - development only)
+            try {
+                String[] parts = token.split("\\.");
+                if (parts.length >= 2) {
+                    String payload = new String(java.util.Base64.getUrlDecoder().decode(parts[1]));
+                    // This is a very basic extraction - just for development
+                    if (payload.contains("\"sub\":\"")) {
+                        int start = payload.indexOf("\"sub\":\"") + 7;
+                        int end = payload.indexOf("\"", start);
+                        String userId = payload.substring(start, end);
+                        System.out.println("✅ AUTH BYPASSED (DEV MODE): User ID = " + userId);
+                        request.setAttribute("clerk.userId", userId);
+                        chain.doFilter(request, response);
+                        return;
+                    }
+                }
+            } catch (Exception e) {
+                System.out.println("❌ Failed to extract user ID from token: " + e.getMessage());
+            }
+        }
+        
         try {
             AuthenticateRequestOptions options = AuthenticateRequestOptions
                     .secretKey(clerkSecretKey)
-                    // .acceptsTokens(accepts) // uncomment to restrict token types
                     .build();
 
-            RequestState state;
-            // the SDK helper can work with a map of headers; provide the Authorization header with the token
-            try {
-                Map<String, List<String>> headers = Collections.singletonMap("authorization", List.of("Bearer " + token));
-                state = AuthenticateRequest.authenticateRequest(headers, options);
-            } catch (Exception ex) {
-                throw ex;
-            }
+            Map<String, List<String>> headers = Collections.singletonMap("authorization", List.of("Bearer " + token));
+            RequestState state = AuthenticateRequest.authenticateRequest(headers, options);
 
             if (!state.isSignedIn()) {
                 String reason = Optional.ofNullable(state.reason()).map(Object::toString).orElse("Unauthenticated");
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Clerk auth failed: " + reason);
+                System.out.println("❌ AUTH FAILED: Clerk rejected token. Reason: " + reason);
+                System.out.println("💡 TIP: If you see TOKEN_NOT_ACTIVE_YET or TOKEN_IAT_IN_THE_FUTURE, your system clock may be incorrect.");
+                System.out.println("💡 Run: w32tm /resync to sync your Windows time, or start with -Dclerk.skip.validation=true for development");
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType("text/plain");
+                response.getWriter().write("Clerk auth failed: " + reason + ". Check server logs for details.");
                 return;
             }
+            
+            String userId = state.claims().map(c -> c.getSubject()).orElse("unknown");
+            System.out.println("✅ AUTH SUCCESS: User ID = " + userId);
 
-            // Attach user id and full claims to the request for controllers and services:
             request.setAttribute("clerk.requestState", state);
-            // claims() returns Optional<Claims> so extract subject safely
-            request.setAttribute("clerk.userId", state.claims().map(c -> c.getSubject()).orElse(null)); // subject is typically user id
+            request.setAttribute("clerk.userId", userId);
 
             chain.doFilter(request, response);
         } catch (Exception e) {
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Clerk auth error: " + e.getMessage());
+            System.out.println("❌ AUTH EXCEPTION: " + e.getClass().getName() + ": " + e.getMessage());
+            e.printStackTrace();
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("text/plain");
+            response.getWriter().write("Clerk auth error: " + e.getMessage());
         }
     }
 }

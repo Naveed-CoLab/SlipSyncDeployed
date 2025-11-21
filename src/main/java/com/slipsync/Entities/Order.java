@@ -38,13 +38,22 @@ public class Order {
     @Column(nullable = false)
     private BigDecimal subtotal = BigDecimal.ZERO;
 
+    @Column(name = "discounts_total")
+    private BigDecimal discountsTotal = BigDecimal.ZERO;
+
     @Column(name = "taxes_total")
     private BigDecimal taxesTotal = BigDecimal.ZERO;
 
     @Column(name = "total_amount", nullable = false)
     private BigDecimal totalAmount = BigDecimal.ZERO;
 
+    @Column(name = "currency")
+    private String currency = "PKR";
+
     @CreationTimestamp
     @Column(name = "placed_at", updatable = false)
     private LocalDateTime placedAt;
+
+    @Column(name = "fulfilled_at")
+    private LocalDateTime fulfilledAt;
 }

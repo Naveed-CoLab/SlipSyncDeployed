@@ -52,7 +52,7 @@ public class ContactController {
         if (user == null) return ResponseEntity.status(401).body("Unauthorized");
 
         Customer customer = new Customer();
-        customer.setFullName(payload.get("fullName"));
+        customer.setName(payload.get("fullName"));
         customer.setPhone(payload.get("phone"));
         customer.setEmail(payload.get("email"));
         customer.setMerchant(user.getMerchant());

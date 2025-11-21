@@ -3,17 +3,21 @@ package com.slipsync.Entities;
 import jakarta.persistence.*;
 import lombok.Data;
 import org.hibernate.annotations.CreationTimestamp;
+
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Entity
 @Table(name = "merchants")
 @Data
 public class Merchant {
 
+    /**
+     * Primary key is now the Clerk organization id (e.g. org_35kd0au4TlJlAqCgWuBeVOmVYcN).
+     * The database column type should be text/varchar.
+     */
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
-    private UUID id;
+    @Column(name = "id", nullable = false, updatable = false, unique = true)
+    private String id;
 
     @Column(nullable = false)
     private String name;

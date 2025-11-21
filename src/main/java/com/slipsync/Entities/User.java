@@ -29,9 +29,15 @@ public class User {
     @JoinColumn(name = "merchant_id", nullable = false)
     private Merchant merchant;
 
-    // Foreign Key to Store (nullable, as an admin might oversee all)
+    // Foreign Key to Role (defines user permissions)
     @ManyToOne
-    @JoinColumn(name = "store_id")
+    @JoinColumn(name = "role_id")
+    private Role role;
+
+    // Foreign Key to Store (if user is assigned to specific store)
+    // Note: This field is NOT in the actual DB schema, but kept for backward compatibility
+    // with existing controllers. Should be removed once controllers are refactored.
+    @Transient
     private Store store;
 
     @CreationTimestamp

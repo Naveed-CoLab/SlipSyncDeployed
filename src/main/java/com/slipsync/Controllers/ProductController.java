@@ -1,7 +1,9 @@
 package com.slipsync.Controllers;
 
+import com.slipsync.DTO.ProductInventoryDto;
 import com.slipsync.Entities.*;
 import com.slipsync.Repositories.*;
+import com.slipsync.Services.StoreContextService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -10,9 +12,10 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.UUID;
 import java.util.Optional;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api")
@@ -23,24 +26,31 @@ public class ProductController {
     private final CategoryRepository categoryRepository;
     private final InventoryRepository inventoryRepository;
     private final UserRepository userRepository;
+    private final StoreContextService storeContextService;
 
     public ProductController(ProductRepository productRepository,
                              ProductVariantRepository variantRepository,
                              CategoryRepository categoryRepository,
                              InventoryRepository inventoryRepository,
                              UserRepository userRepository,
-                             StoreRepository storeRepository) {
+                             StoreContextService storeContextService) {
         this.productRepository = productRepository;
         this.variantRepository = variantRepository;
         this.categoryRepository = categoryRepository;
         this.inventoryRepository = inventoryRepository;
         this.userRepository = userRepository;
+        this.storeContextService = storeContextService;
     }
 
     // Helper to get the User for the current request
     private User getCurrentUser(HttpServletRequest request) {
         String clerkId = (String) request.getAttribute("clerk.userId");
-        return userRepository.findByClerkUserId(clerkId).orElse(null);
+        return userRepository.findByClerkUserId(clerkId)
+                .map(user -> {
+                    storeContextService.attachStore(user, request);
+                    return user;
+                })
+                .orElse(null);
     }
 
     // --- CATEGORIES ---
@@ -89,6 +99,12 @@ public class ProductController {
     public ResponseEntity<?> createProduct(HttpServletRequest request, @RequestBody Map<String, Object> payload) {
         User user = getCurrentUser(request);
         if (user == null) return ResponseEntity.status(401).body("Unauthorized");
+        if (!canManageProducts(user)) {
+            return ResponseEntity.status(403).body("Forbidden: role cannot create products");
+        }
+        if (user.getStore() == null) {
+            return ResponseEntity.status(400).body("Assign yourself to a store before creating products");
+        }
 
         try {
             // 1. Create Product
@@ -97,6 +113,7 @@ public class ProductController {
             product.setSku((String) payload.get("sku"));
             product.setDescription((String) payload.get("description"));
             product.setMerchant(user.getMerchant());
+            product.setStore(user.getStore());
 
             if (payload.containsKey("categoryId")) {
                 UUID catId = UUID.fromString((String) payload.get("categoryId"));
@@ -109,9 +126,16 @@ public class ProductController {
             ProductVariant variant = new ProductVariant();
             variant.setProduct(savedProduct);
             variant.setSku((String) payload.get("sku")); // Default variant shares product SKU often
-            variant.setPrice(new BigDecimal(payload.get("price").toString()));
+            Object priceObj = payload.get("price");
+            if (priceObj == null) {
+                throw new IllegalArgumentException("Price is required");
+            }
+            variant.setPrice(new BigDecimal(priceObj.toString()));
             if (payload.containsKey("cost")) {
                 variant.setCost(new BigDecimal(payload.get("cost").toString()));
+            }
+            if (payload.containsKey("barcode")) {
+                variant.setBarcode(String.valueOf(payload.get("barcode")));
             }
             ProductVariant savedVariant = variantRepository.save(variant);
 
@@ -121,7 +145,14 @@ public class ProductController {
                 Inventory inventory = new Inventory();
                 inventory.setStore(currentStore);
                 inventory.setVariant(savedVariant);
-                inventory.setQuantity(Integer.parseInt(payload.getOrDefault("initialStock", "0").toString()));
+                int initialStock = Integer.parseInt(payload.getOrDefault("initialStock", "0").toString());
+                if (initialStock < 0) {
+                    throw new IllegalArgumentException("Initial stock cannot be negative");
+                }
+                inventory.setQuantity(initialStock);
+                if (payload.containsKey("reorderPoint")) {
+                    inventory.setReorderPoint(Integer.parseInt(payload.get("reorderPoint").toString()));
+                }
                 inventoryRepository.save(inventory);
             }
 
@@ -150,12 +181,54 @@ public class ProductController {
         List<Inventory> inventoryList = inventoryRepository.findByStoreId(user.getStore().getId());
         return ResponseEntity.ok(inventoryList);
     }
+
+    @GetMapping("/products/overview")
+    public ResponseEntity<?> getProductOverview(HttpServletRequest request) {
+        User user = getCurrentUser(request);
+        if (user == null) {
+            return ResponseEntity.status(401).body("Unauthorized");
+        }
+        if (user.getStore() == null) {
+            return ResponseEntity.status(400).body("User is not assigned to a store");
+        }
+
+        List<ProductInventoryDto> overview = variantRepository.findInventoryOverview(
+                user.getMerchant().getId(),
+                user.getStore().getId());
+
+        if (overview.isEmpty()) {
+            List<Product> products = productRepository.findByMerchantId(user.getMerchant().getId());
+            UUID activeStoreId = user.getStore().getId();
+
+            overview = products.stream()
+                    .filter(prod -> prod.getStore() == null || prod.getStore().getId().equals(activeStoreId))
+                    .flatMap(prod -> variantRepository.findByProductId(prod.getId()).stream()
+                            .map(variant -> new ProductInventoryDto(
+                                    null,
+                                    prod.getId(),
+                                    variant.getId(),
+                                    prod.getName(),
+                                    variant.getSku(),
+                                    variant.getBarcode(),
+                                    variant.getPrice(),
+                                    variant.getCost(),
+                                    0,
+                                    0,
+                                    prod.getCreatedAt())))
+                    .toList();
+        }
+
+        return ResponseEntity.ok(overview);
+    }
     
     @PutMapping("/inventory/adjust")
     public ResponseEntity<?> adjustInventory(HttpServletRequest request, @RequestBody Map<String, Object> payload) {
         User user = getCurrentUser(request);
         if (user == null) return ResponseEntity.status(401).body("Unauthorized");
         if (user.getStore() == null) return ResponseEntity.status(400).body("User is not assigned to a store");
+        if (!canManageProducts(user)) {
+            return ResponseEntity.status(403).body("Forbidden: role cannot adjust stock");
+        }
 
         try {
             UUID variantId = UUID.fromString((String) payload.get("productVariantId"));
@@ -165,7 +238,14 @@ public class ProductController {
             
             if (inventoryOpt.isPresent()) {
                 Inventory inventory = inventoryOpt.get();
-                inventory.setQuantity(inventory.getQuantity() + adjustment);
+                int newQuantity = inventory.getQuantity() + adjustment;
+                if (newQuantity < 0) {
+                    return ResponseEntity.status(400).body("Adjustment would result in negative stock");
+                }
+                inventory.setQuantity(newQuantity);
+                if (payload.containsKey("reorderPoint")) {
+                    inventory.setReorderPoint(Integer.parseInt(payload.get("reorderPoint").toString()));
+                }
                 return ResponseEntity.ok(inventoryRepository.save(inventory));
             } else {
                 // Create new inventory record if it doesn't exist
@@ -175,12 +255,26 @@ public class ProductController {
                 Inventory newInventory = new Inventory();
                 newInventory.setStore(user.getStore());
                 newInventory.setVariant(variant);
+                if (adjustment < 0) {
+                    return ResponseEntity.status(400).body("Cannot set negative stock for new inventory");
+                }
                 newInventory.setQuantity(adjustment);
+                if (payload.containsKey("reorderPoint")) {
+                    newInventory.setReorderPoint(Integer.parseInt(payload.get("reorderPoint").toString()));
+                }
                 return ResponseEntity.ok(inventoryRepository.save(newInventory));
             }
 
         } catch (Exception e) {
              return ResponseEntity.status(400).body("Error adjusting inventory: " + e.getMessage());
         }
+    }
+
+    private boolean canManageProducts(User user) {
+        if (user == null || user.getRole() == null || user.getRole().getName() == null) {
+            return false;
+        }
+        String role = user.getRole().getName().toUpperCase(Locale.ROOT);
+        return role.equals("ADMIN") || role.equals("EMPLOYEE");
     }
 }

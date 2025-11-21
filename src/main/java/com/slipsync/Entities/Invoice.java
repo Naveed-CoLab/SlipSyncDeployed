@@ -24,6 +24,10 @@ public class Invoice {
     @JoinColumn(name = "merchant_id")
     private Merchant merchant;
 
+    @ManyToOne
+    @JoinColumn(name = "store_id")
+    private Store store;
+
     @Column(name = "invoice_number", unique = true)
     private String invoiceNumber;
 
@@ -32,6 +36,9 @@ public class Invoice {
     private LocalDateTime issuedAt;
 
     private BigDecimal total;
+
+    @Column(name = "currency")
+    private String currency = "PKR";
 
     @Column(name = "pdf_url")
     private String pdfUrl; // For future E-Bill PDF link

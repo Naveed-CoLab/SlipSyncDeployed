@@ -30,4 +30,10 @@ public class OrderItem {
 
     @Column(name = "total_price", nullable = false)
     private BigDecimal totalPrice;
+
+    @Column(name = "discounts_total")
+    private BigDecimal discountsTotal = BigDecimal.ZERO;
+
+    @Column(name = "taxes_total")
+    private BigDecimal taxesTotal = BigDecimal.ZERO;
 }
