@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -104,6 +105,31 @@ public class StoreController {
         } catch (Exception e) {
             return ResponseEntity.status(400).body("Error creating store: " + e.getMessage());
         }
+    }
+
+    @DeleteMapping("/stores/{id}")
+    @Transactional
+    public ResponseEntity<?> deleteStore(HttpServletRequest request, @PathVariable UUID id) {
+        User user = getCurrentUser(request);
+        if (user == null) return ResponseEntity.status(401).body("Unauthorized");
+
+        // Only admins can delete stores
+        if (!permissionService.hasPermission(user, "manage_stores")) {
+            return ResponseEntity.status(403).body("Permission denied: Only admins can delete stores");
+        }
+
+        Optional<Store> storeOpt = storeRepository.findById(id);
+        if (storeOpt.isEmpty()) {
+            return ResponseEntity.status(404).body("Store not found");
+        }
+
+        Store store = storeOpt.get();
+        if (!store.getMerchant().getId().equals(user.getMerchant().getId())) {
+            return ResponseEntity.status(403).body("Forbidden: store belongs to different merchant");
+        }
+
+        storeRepository.delete(store);
+        return ResponseEntity.ok(Map.of("message", "Store deleted successfully"));
     }
 }
 

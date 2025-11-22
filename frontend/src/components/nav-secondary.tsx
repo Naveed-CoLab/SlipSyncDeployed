@@ -14,6 +14,7 @@ import {
 
 const linkMap: Record<string, string> = {
   "Manage Employees": "/manage-employees",
+  "Manage Stores": "/manage-stores",
   "Support": "#",
   "Reports": "#",
 }
@@ -34,13 +35,10 @@ export function NavSecondary({
   // Check if user is admin - handle both Clerk format (org:admin) and database format (ADMIN)
   const isAdmin = useMemo(() => {
     if (!userRole) {
-      console.log('🔍 [NavSecondary] userRole is null/undefined')
       return false
     }
     const role = userRole.toLowerCase()
-    const result = role === 'org:admin' || role === 'admin'
-    console.log('🔍 [NavSecondary] userRole:', userRole, 'normalized:', role, 'isAdmin:', result)
-    return result
+    return role === 'org:admin' || role === 'admin'
   }, [userRole])
   
   const [pathname, setPathname] = useState(

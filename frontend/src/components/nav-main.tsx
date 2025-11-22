@@ -27,6 +27,7 @@ const linkMap: Record<string, string> = {
   Orders: "/orders",
   Invoices: "/invoices",
   "Order Processing": "/pos",
+  Customers: "/customers",
   "Manage Employees": "/manage-employees",
 }
 
@@ -44,13 +45,10 @@ export function NavMain({
   // Check if user is admin - handle both Clerk format (org:admin) and database format (ADMIN)
   const isAdmin = useMemo(() => {
     if (!userRole) {
-      console.log('🔍 [NavMain] userRole is null/undefined')
       return false
     }
     const role = userRole.toLowerCase()
-    const result = role === 'org:admin' || role === 'admin'
-    console.log('🔍 [NavMain] userRole:', userRole, 'normalized:', role, 'isAdmin:', result)
-    return result
+    return role === 'org:admin' || role === 'admin'
   }, [userRole])
   
   const { session } = useSession()
@@ -107,7 +105,6 @@ export function NavMain({
 
       window.dispatchEvent(new CustomEvent("slipsync:store-created"))
     } catch (e) {
-      console.error("Failed to create store", e)
       alert("Failed to create store. Check console for details.")
     } finally {
       setIsSubmitting(false)

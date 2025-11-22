@@ -19,7 +19,11 @@ public class Customer {
     @JoinColumn(name = "merchant_id", nullable = false)
     private Merchant merchant;
 
-    @Column(name = "name")
+    @ManyToOne
+    @JoinColumn(name = "store_id", nullable = false)
+    private Store store;
+
+    @Column(name = "name", nullable = false)
     private String name;
 
     private String phone;

@@ -53,9 +53,6 @@ export function SectionCards({
           <div className="line-clamp-1 flex gap-2 font-medium">
             Sum of paid orders placed today
           </div>
-          <div className="text-muted-foreground">
-            Calculated from <code>/api/orders</code>
-          </div>
         </CardFooter>
       </Card>
       <Card className="@container/card rounded-3xl border border-border/70 bg-card/90 shadow-sm backdrop-blur">
@@ -73,9 +70,6 @@ export function SectionCards({
         <CardFooter className="flex-col items-start gap-1.5 text-sm">
           <div className="line-clamp-1 flex gap-2 font-medium">
             Orders created for your current store
-          </div>
-          <div className="text-muted-foreground">
-            Based on the <code>placedAt</code> timestamp
           </div>
         </CardFooter>
       </Card>
@@ -95,9 +89,6 @@ export function SectionCards({
           <div className="line-clamp-1 flex gap-2 font-medium">
             Devices checked-in in the last minute
           </div>
-          <div className="text-muted-foreground">
-            From <code>/api/print-devices/status</code>
-          </div>
         </CardFooter>
       </Card>
       <Card className="@container/card rounded-3xl border border-border/70 bg-card/90 shadow-sm backdrop-blur">
@@ -115,9 +106,6 @@ export function SectionCards({
         <CardFooter className="flex-col items-start gap-1.5 text-sm">
           <div className="line-clamp-1 flex gap-2 font-medium">
             Inventory at or below reorder point
-          </div>
-          <div className="text-muted-foreground">
-            From <code>/api/inventory</code>
           </div>
         </CardFooter>
       </Card>

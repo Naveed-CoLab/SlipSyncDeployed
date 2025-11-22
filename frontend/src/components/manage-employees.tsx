@@ -68,7 +68,6 @@ export function ManageEmployees({ apiBaseUrl, token, userRole, storeAccess }: Ma
 
         if (!employeesRes.ok) {
           const errorText = await employeesRes.text()
-          console.error('Failed to load employees:', employeesRes.status, errorText)
           if (employeesRes.status === 403) {
             setError('Permission denied: Only administrators can manage employee store access.')
             setLoading(false)
@@ -78,7 +77,6 @@ export function ManageEmployees({ apiBaseUrl, token, userRole, storeAccess }: Ma
         }
         if (!storesRes.ok) {
           const errorText = await storesRes.text()
-          console.error('Failed to load stores:', storesRes.status, errorText)
           if (storesRes.status === 403) {
             setError('Permission denied: Only administrators can view all stores.')
             setLoading(false)
@@ -101,7 +99,6 @@ export function ManageEmployees({ apiBaseUrl, token, userRole, storeAccess }: Ma
         setSelectedStores(initial)
         setError(null) // Clear any previous errors
       } catch (error) {
-        console.error(error)
         setError(error instanceof Error ? error.message : 'Failed to load employee data')
         toast.error('Failed to load employee data')
       } finally {

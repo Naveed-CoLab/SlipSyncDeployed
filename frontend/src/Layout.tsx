@@ -13,12 +13,14 @@ export function Layout({ children, sidebarProps }: LayoutProps) {
     <SidebarProvider>
       <div className="flex min-h-screen bg-background text-foreground">
         <AppSidebar {...sidebarProps} />
-        <main className="flex flex-1 flex-col">
+        <main className="flex flex-1 flex-col overflow-x-hidden">
           <div className="flex items-center gap-2 border-b border-border px-4 py-2 lg:hidden">
             <SidebarTrigger />
             <span className="text-sm font-medium text-muted-foreground">Menu</span>
           </div>
-          {children}
+          <div className="w-full max-w-full overflow-x-hidden">
+            {children}
+          </div>
         </main>
       </div>
     </SidebarProvider>

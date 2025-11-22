@@ -2,12 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   BadgeCheck,
   Download,
-  PackagePlus,
   Percent,
   Plus,
-  RefreshCcw,
   ShoppingCart,
-  Warehouse,
+  User,
+  UserPlus,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -19,11 +18,16 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { EmptyState } from '@/components/empty-state'
 
 type CartItem = {
   variantId: string
@@ -50,7 +54,6 @@ interface OrderProcessingProps {
   storeName?: string | null
   products: ProductInventoryEntry[]
   currency: string
-  canManage: boolean
   userRole?: string | null
   storeAccess?: string
   onRefresh(): void
@@ -80,35 +83,23 @@ export function OrderProcessing({
   storeName,
   products,
   currency,
-  canManage,
   userRole,
   storeAccess,
   onRefresh,
 }: OrderProcessingProps) {
   const [cart, setCart] = useState<CartItem[]>([])
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null)
+  const [productDialogOpen, setProductDialogOpen] = useState(false)
+  const [productSearchQuery, setProductSearchQuery] = useState('')
   const [qtyInput, setQtyInput] = useState(1)
   const [discountAmount, setDiscountAmount] = useState(0)
   const [taxRate, setTaxRate] = useState(0)
   const [notes, setNotes] = useState('')
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
+  const [customers, setCustomers] = useState<Array<{ id: string; name: string; email: string | null; phone: string | null }>>([])
+  const [customerDialogOpen, setCustomerDialogOpen] = useState(false)
+  const [newCustomerForm, setNewCustomerForm] = useState({ name: '', email: '', phone: '' })
   const [processingOrder, setProcessingOrder] = useState(false)
-  const [creatingProduct, setCreatingProduct] = useState(false)
-  const [adjustingStock, setAdjustingStock] = useState(false)
-  const [productForm, setProductForm] = useState({
-    name: '',
-    sku: '',
-    price: '',
-    cost: '',
-    initialStock: '',
-    reorderPoint: '',
-    description: '',
-    barcode: '',
-  })
-  const [adjustForm, setAdjustForm] = useState({
-    variantId: '',
-    quantityChange: '',
-    reorderPoint: '',
-  })
   const [reports, setReports] = useState<{ daily: SalesSummary | null; monthly: SalesSummary | null }>({
     daily: null,
     monthly: null,
@@ -117,6 +108,17 @@ export function OrderProcessing({
   const [reportVersion, setReportVersion] = useState(0)
 
   const productOptions = useMemo(() => products ?? [], [products])
+  
+  // Filter products based on search query
+  const filteredProducts = useMemo(() => {
+    if (!productSearchQuery.trim()) return productOptions
+    const query = productSearchQuery.toLowerCase()
+    return productOptions.filter(
+      (item) =>
+        item.productName.toLowerCase().includes(query) ||
+        (item.sku && item.sku.toLowerCase().includes(query))
+    )
+  }, [productOptions, productSearchQuery])
 
   // Helper to build headers with role and store_access
   const buildHeaders = (includeContentType = false): Record<string, string> => {
@@ -146,8 +148,25 @@ export function OrderProcessing({
   const taxAmount = Number(((taxableBase * Math.max(taxRate, 0)) / 100).toFixed(2))
   const total = taxableBase + taxAmount
 
+  // Fetch customers
   useEffect(() => {
-    if (!token || !storeId || !canManage) {
+    if (!token || !storeId) return
+    async function fetchCustomers() {
+      try {
+        const headers = buildHeaders()
+        const res = await fetch(`${apiBaseUrl}/api/customers`, { headers })
+        if (res.ok) {
+          const data = await res.json()
+          setCustomers(data)
+        }
+      } catch (error) {
+      }
+    }
+    fetchCustomers()
+  }, [token, storeId, userRole, storeAccess])
+
+  useEffect(() => {
+    if (!token || !storeId) {
       return
     }
     let cancelled = false
@@ -168,7 +187,6 @@ export function OrderProcessing({
           setReports({ daily: dailyJson, monthly: monthlyJson })
         }
       } catch (error) {
-        console.error(error)
         if (!cancelled) {
           toast.error('Unable to load reporting data')
         }
@@ -182,7 +200,7 @@ export function OrderProcessing({
     return () => {
       cancelled = true
     }
-  }, [apiBaseUrl, token, storeId, canManage, reportVersion, userRole, storeAccess])
+  }, [apiBaseUrl, token, storeId, reportVersion, userRole, storeAccess])
 
   const handleAddToCart = () => {
     if (!selectedVariantId) {
@@ -247,9 +265,23 @@ export function OrderProcessing({
 
   const resetCart = () => {
     setCart([])
+    setSelectedVariantId(null)
+    setQtyInput(1)
     setDiscountAmount(0)
     setTaxRate(0)
     setNotes('')
+    setSelectedCustomerId(null)
+    setNewCustomerForm({ name: '', email: '', phone: '' })
+  }
+
+  const handleCreateCustomer = async () => {
+    if (!newCustomerForm.name.trim()) {
+      toast.error('Customer name is required')
+      return
+    }
+    setCustomerDialogOpen(false)
+    // Customer will be created during order processing
+    toast.success('Customer will be added to order')
   }
 
   const handleProcessOrder = async () => {
@@ -263,7 +295,7 @@ export function OrderProcessing({
     }
     try {
       setProcessingOrder(true)
-      const payload = {
+      const payload: any = {
         items: cart.map((item) => ({
           productVariantId: item.variantId,
           quantity: item.quantity,
@@ -272,6 +304,18 @@ export function OrderProcessing({
         discountAmount: normalizedDiscount,
         taxRate,
         notes,
+      }
+
+      // Add customer to payload
+      if (selectedCustomerId && selectedCustomerId !== 'walk-in') {
+        payload.customerId = selectedCustomerId
+      } else if (newCustomerForm.name) {
+        // Create new customer during order (no duplicate checks)
+        payload.customer = {
+          name: newCustomerForm.name,
+          email: newCustomerForm.email || undefined,
+          phone: newCustomerForm.phone || undefined,
+        }
       }
       const res = await fetch(`${apiBaseUrl}/api/orders`, {
         method: 'POST',
@@ -284,10 +328,11 @@ export function OrderProcessing({
       }
       toast.success('Order processed successfully')
       resetCart()
+      setSelectedCustomerId(null)
+      setNewCustomerForm({ name: '', email: '', phone: '' })
       onRefresh()
       refreshReports()
     } catch (error) {
-      console.error(error)
       toast.error(error instanceof Error ? error.message : 'Failed to process order')
     } finally {
       setProcessingOrder(false)
@@ -298,87 +343,6 @@ export function OrderProcessing({
     if (!token || !storeId) return
     setReports({ daily: null, monthly: null })
     setReportVersion((prev) => prev + 1)
-  }
-
-  const handleCreateProduct = async (event: React.FormEvent) => {
-    event.preventDefault()
-    if (!token || !storeId) return
-    try {
-      setCreatingProduct(true)
-      const payload = {
-        ...productForm,
-        price: Number(productForm.price),
-        cost: productForm.cost ? Number(productForm.cost) : undefined,
-        initialStock: productForm.initialStock || '0',
-        reorderPoint: productForm.reorderPoint || undefined,
-      }
-      const res = await fetch(`${apiBaseUrl}/api/products`, {
-        method: 'POST',
-        headers: buildHeaders(true),
-        body: JSON.stringify(payload),
-      })
-      if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text)
-      }
-      toast.success('Product created')
-      setProductForm({
-        name: '',
-        sku: '',
-        price: '',
-        cost: '',
-        initialStock: '',
-        reorderPoint: '',
-        description: '',
-        barcode: '',
-      })
-      onRefresh()
-      refreshReports()
-    } catch (error) {
-      console.error(error)
-      toast.error(error instanceof Error ? error.message : 'Failed to create product')
-    } finally {
-      setCreatingProduct(false)
-    }
-  }
-
-  const handleAdjustStock = async (event: React.FormEvent) => {
-    event.preventDefault()
-    if (!token || !storeId) return
-    if (!adjustForm.variantId) {
-      toast.error('Select a product to adjust')
-      return
-    }
-    try {
-      setAdjustingStock(true)
-      const payload = {
-        productVariantId: adjustForm.variantId,
-        quantityChange: Number(adjustForm.quantityChange || 0),
-        reorderPoint: adjustForm.reorderPoint ? Number(adjustForm.reorderPoint) : undefined,
-      }
-      const res = await fetch(`${apiBaseUrl}/api/inventory/adjust`, {
-        method: 'PUT',
-        headers: buildHeaders(true),
-        body: JSON.stringify(payload),
-      })
-      if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text)
-      }
-      toast.success('Inventory updated')
-      setAdjustForm({
-        variantId: '',
-        quantityChange: '',
-        reorderPoint: '',
-      })
-      onRefresh()
-      refreshReports()
-    } catch (error) {
-      console.error(error)
-      toast.error(error instanceof Error ? error.message : 'Unable to adjust inventory')
-    } finally {
-      setAdjustingStock(false)
-    }
   }
 
   const handleExportCsv = async (range: 'daily' | 'monthly') => {
@@ -398,27 +362,10 @@ export function OrderProcessing({
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
     } catch (error) {
-      console.error(error)
       toast.error('Unable to download CSV')
     }
   }
 
-  if (!canManage) {
-    return (
-      <Card className="rounded-3xl border border-dashed border-border/60 bg-card/60 shadow-none">
-        <CardHeader>
-          <CardTitle>Order processing</CardTitle>
-          <CardDescription>Only admins and employees can access POS tools.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <EmptyState
-            title="Access restricted"
-            description="Your current organization role does not allow POS operations."
-          />
-        </CardContent>
-      </Card>
-    )
-  }
 
   return (
     <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
@@ -437,39 +384,18 @@ export function OrderProcessing({
                   <ShoppingCart className="size-3" />
                   Product
                 </Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="mt-1 w-full justify-between text-left">
-                      {selectedVariantId
-                        ? productOptions.find((p) => p.variantId === selectedVariantId)?.productName
-                        : 'Search by name or SKU'}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="p-0" side="bottom" align="start">
-                    <Command>
-                      <CommandInput placeholder="Type to filter..." />
-                      <CommandList>
-                        <CommandEmpty>No products found.</CommandEmpty>
-                        <CommandGroup>
-                          {productOptions.map((item) => (
-                            <CommandItem
-                              key={item.variantId}
-                              value={item.variantId}
-                              onSelect={(value) => setSelectedVariantId(value)}
-                            >
-                              <div className="flex flex-col">
-                                <span className="font-medium">{item.productName}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {item.sku} • In stock: {item.quantity ?? 0}
-                                </span>
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <Button
+                  variant="outline"
+                  className="mt-1 w-full justify-between text-left font-normal"
+                  onClick={() => setProductDialogOpen(true)}
+                >
+                  <span className="truncate">
+                    {selectedVariantId
+                      ? productOptions.find((p) => p.variantId === selectedVariantId)?.productName
+                      : 'Search by name or SKU'}
+                  </span>
+                  <Plus className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
               </div>
               <div className="w-full md:w-32">
                 <Label htmlFor="pos-qty">Qty</Label>
@@ -540,6 +466,58 @@ export function OrderProcessing({
                   )}
                 </TableBody>
               </Table>
+            </div>
+
+            {/* Customer Selection */}
+            <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
+              <Label htmlFor="customer" className="mb-2 block">
+                Customer (Optional)
+              </Label>
+              <div className="flex gap-2">
+                <Select value={selectedCustomerId || 'walk-in'} onValueChange={(value) => {
+                  if (value === 'walk-in') {
+                    setSelectedCustomerId(null)
+                  } else {
+                    setSelectedCustomerId(value)
+                  }
+                  setNewCustomerForm({ name: '', email: '', phone: '' })
+                }}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Select existing customer or create new" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="walk-in">Walk-in Customer</SelectItem>
+                    {customers.map((customer) => (
+                      <SelectItem key={customer.id} value={customer.id}>
+                        {customer.name} {customer.phone ? `(${customer.phone})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedCustomerId(null)
+                    setCustomerDialogOpen(true)
+                  }}
+                >
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  New
+                </Button>
+              </div>
+              {newCustomerForm.name && !selectedCustomerId && (
+                <div className="mt-2 rounded-lg border border-primary/20 bg-primary/5 p-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-primary" />
+                    <span className="font-medium">{newCustomerForm.name}</span>
+                    {newCustomerForm.phone && <span className="text-muted-foreground">• {newCustomerForm.phone}</span>}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    New customer will be created with this order
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
@@ -615,165 +593,6 @@ export function OrderProcessing({
 
       <div className="space-y-6">
         <Card className="rounded-3xl border border-border/70 bg-card/80 shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <PackagePlus className="size-4" />
-              Quick add product
-            </CardTitle>
-            <CardDescription>Create a SKU and optional opening stock.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form className="space-y-3" onSubmit={handleCreateProduct}>
-              <div>
-                <Label htmlFor="product-name">Name</Label>
-                <Input
-                  id="product-name"
-                  required
-                  value={productForm.name}
-                  onChange={(event) => setProductForm((prev) => ({ ...prev, name: event.target.value }))}
-                />
-              </div>
-              <div>
-                <Label htmlFor="product-sku">SKU</Label>
-                <Input
-                  id="product-sku"
-                  required
-                  value={productForm.sku}
-                  onChange={(event) => setProductForm((prev) => ({ ...prev, sku: event.target.value }))}
-                />
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div>
-                  <Label htmlFor="product-price">Price ({currency})</Label>
-                  <Input
-                    id="product-price"
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    required
-                    value={productForm.price}
-                    onChange={(event) => setProductForm((prev) => ({ ...prev, price: event.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="product-cost">Cost</Label>
-                  <Input
-                    id="product-cost"
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={productForm.cost}
-                    onChange={(event) => setProductForm((prev) => ({ ...prev, cost: event.target.value }))}
-                  />
-                </div>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div>
-                  <Label htmlFor="initial-stock">Initial stock</Label>
-                  <Input
-                    id="initial-stock"
-                    type="number"
-                    min={0}
-                    value={productForm.initialStock}
-                    onChange={(event) => setProductForm((prev) => ({ ...prev, initialStock: event.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="reorder-point">Reorder point</Label>
-                  <Input
-                    id="reorder-point"
-                    type="number"
-                    min={0}
-                    value={productForm.reorderPoint}
-                    onChange={(event) => setProductForm((prev) => ({ ...prev, reorderPoint: event.target.value }))}
-                  />
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="product-barcode">Barcode</Label>
-                <Input
-                  id="product-barcode"
-                  value={productForm.barcode}
-                  onChange={(event) => setProductForm((prev) => ({ ...prev, barcode: event.target.value }))}
-                />
-              </div>
-              <div>
-                <Label htmlFor="product-description">Description</Label>
-                <textarea
-                  id="product-description"
-                  value={productForm.description}
-                  onChange={(event) => setProductForm((prev) => ({ ...prev, description: event.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-input bg-transparent p-2 text-sm shadow-sm"
-                  rows={3}
-                  placeholder="Optional details"
-                />
-              </div>
-              <Button type="submit" disabled={creatingProduct} className="w-full">
-                <PackagePlus className="mr-2 size-4" />
-                {creatingProduct ? 'Creating...' : 'Add product'}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-3xl border border-border/70 bg-card/80 shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Warehouse className="size-4" />
-              Stock adjustment
-            </CardTitle>
-            <CardDescription>Increase or decrease inventory for any SKU.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form className="space-y-3" onSubmit={handleAdjustStock}>
-              <div>
-                <Label>Product</Label>
-                <Select
-                  value={adjustForm.variantId}
-                  onValueChange={(value) => setAdjustForm((prev) => ({ ...prev, variantId: value }))}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Choose variant" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {productOptions.map((item) => (
-                      <SelectItem key={item.variantId} value={item.variantId}>
-                        {item.productName} · {item.sku}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div>
-                  <Label htmlFor="quantity-change">Quantity change</Label>
-                  <Input
-                    id="quantity-change"
-                    type="number"
-                    value={adjustForm.quantityChange}
-                    onChange={(event) => setAdjustForm((prev) => ({ ...prev, quantityChange: event.target.value }))}
-                    placeholder="+5 or -3"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="adjust-reorder">Reorder point</Label>
-                  <Input
-                    id="adjust-reorder"
-                    type="number"
-                    value={adjustForm.reorderPoint}
-                    onChange={(event) => setAdjustForm((prev) => ({ ...prev, reorderPoint: event.target.value }))}
-                  />
-                </div>
-              </div>
-              <Button type="submit" disabled={adjustingStock} className="w-full" variant="outline">
-                <RefreshCcw className="mr-2 size-4" />
-                {adjustingStock ? 'Updating...' : 'Apply adjustment'}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-3xl border border-border/70 bg-card/80 shadow-sm">
           <CardHeader className="flex flex-col gap-2">
             <CardTitle className="flex items-center gap-2">
               <BadgeCheck className="size-4" />
@@ -835,6 +654,136 @@ export function OrderProcessing({
           </CardContent>
         </Card>
       </div>
+
+      {/* Customer Creation Dialog */}
+      <Dialog open={customerDialogOpen} onOpenChange={setCustomerDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Customer</DialogTitle>
+            <DialogDescription>
+              Add customer information. This customer will be created when you process the order.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="customer-name">Name *</Label>
+              <Input
+                id="customer-name"
+                value={newCustomerForm.name}
+                onChange={(e) => setNewCustomerForm({ ...newCustomerForm, name: e.target.value })}
+                placeholder="Customer name"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="customer-email">Email</Label>
+              <Input
+                id="customer-email"
+                type="email"
+                value={newCustomerForm.email}
+                onChange={(e) => setNewCustomerForm({ ...newCustomerForm, email: e.target.value })}
+                placeholder="customer@example.com"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="customer-phone">Phone</Label>
+              <Input
+                id="customer-phone"
+                value={newCustomerForm.phone}
+                onChange={(e) => setNewCustomerForm({ ...newCustomerForm, phone: e.target.value })}
+                placeholder="+1234567890"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCustomerDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreateCustomer}>Add Customer</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Product Selection Dialog */}
+      <Dialog open={productDialogOpen} onOpenChange={setProductDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Select Product</DialogTitle>
+            <DialogDescription>
+              Search and select a product to add to the order
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 flex flex-col gap-4 min-h-0">
+            <div className="relative">
+              <Input
+                placeholder="Search by product name or SKU..."
+                value={productSearchQuery}
+                onChange={(e) => setProductSearchQuery(e.target.value)}
+                className="w-full"
+                autoFocus
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto border rounded-lg">
+              {filteredProducts.length === 0 ? (
+                <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+                  {productSearchQuery ? 'No products found matching your search' : 'No products available'}
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {filteredProducts.map((item) => {
+                    const isSelected = selectedVariantId === item.variantId
+                    const hasStock = (item.quantity ?? 0) > 0
+                    return (
+                      <button
+                        key={item.variantId}
+                        type="button"
+                        onClick={() => {
+                          if (hasStock) {
+                            setSelectedVariantId(item.variantId)
+                            setProductDialogOpen(false)
+                            setProductSearchQuery('')
+                          }
+                        }}
+                        disabled={!hasStock}
+                        className={`w-full text-left p-4 hover:bg-accent transition-colors ${
+                          isSelected ? 'bg-accent border-l-4 border-l-primary' : ''
+                        } ${!hasStock ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm">{item.productName}</div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              SKU: {item.sku || 'N/A'}
+                            </div>
+                            <div className="flex items-center gap-2 mt-2">
+                              <Badge variant={hasStock ? 'secondary' : 'destructive'} className="text-xs">
+                                {hasStock ? `In stock: ${item.quantity}` : 'Out of stock'}
+                              </Badge>
+                              <span className="text-xs font-medium text-muted-foreground">
+                                {formatMoney(typeof item.price === 'number' ? item.price : Number(item.price), currency)}
+                              </span>
+                            </div>
+                          </div>
+                          {isSelected && (
+                            <BadgeCheck className="h-5 w-5 text-primary shrink-0" />
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setProductDialogOpen(false)
+              setProductSearchQuery('')
+            }}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

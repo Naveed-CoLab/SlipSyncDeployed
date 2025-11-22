@@ -1,6 +1,8 @@
 package com.slipsync.Controllers;
 
 import com.slipsync.DTO.OrderSummaryDto;
+import com.slipsync.DTO.OrderDetailDto;
+import com.slipsync.DTO.OrderItemDetailDto;
 import com.slipsync.Entities.*;
 import com.slipsync.Repositories.*;
 import com.slipsync.Services.StoreContextService;
@@ -14,6 +16,7 @@ import java.math.RoundingMode;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @RestController
@@ -58,6 +61,77 @@ public class OrderController {
     }
 
     // --- GET ORDERS ---
+    @GetMapping("/orders/{id}")
+    public ResponseEntity<?> getOrderDetails(HttpServletRequest request, @PathVariable UUID id) {
+        User user = getCurrentUser(request);
+        if (user == null)
+            return ResponseEntity.status(401).body("Unauthorized");
+        if (user.getStore() == null)
+            return ResponseEntity.status(400).body("No store assigned");
+
+        Optional<Order> orderOpt = orderRepository.findById(id);
+        if (orderOpt.isEmpty()) {
+            return ResponseEntity.status(404).body("Order not found");
+        }
+
+        Order order = orderOpt.get();
+        
+        // Check if order belongs to user's store
+        if (!order.getStore().getId().equals(user.getStore().getId())) {
+            return ResponseEntity.status(403).body("Forbidden: order belongs to different store");
+        }
+
+        // Fetch order items with product and variant info
+        List<OrderItem> orderItems = orderItemRepository.findByOrderIdWithVariantAndProduct(id);
+        
+        List<OrderItemDetailDto> itemDtos = orderItems.stream()
+                .map(item -> {
+                    ProductVariant variant = item.getVariant();
+                    Product product = variant.getProduct();
+                    return new OrderItemDetailDto(
+                            item.getId(),
+                            variant.getId(),
+                            product.getId(),
+                            product.getName(),
+                            variant.getSku(),
+                            variant.getBarcode(),
+                            item.getQuantity(),
+                            item.getUnitPrice(),
+                            item.getDiscountsTotal() != null ? item.getDiscountsTotal() : BigDecimal.ZERO,
+                            item.getTaxesTotal() != null ? item.getTaxesTotal() : BigDecimal.ZERO,
+                            item.getTotalPrice()
+                    );
+                })
+                .toList();
+
+        String customerName = order.getCustomer() != null && order.getCustomer().getName() != null
+                ? order.getCustomer().getName()
+                : "Walk-in";
+        String customerEmail = order.getCustomer() != null ? order.getCustomer().getEmail() : null;
+        String customerPhone = order.getCustomer() != null ? order.getCustomer().getPhone() : null;
+        UUID customerId = order.getCustomer() != null ? order.getCustomer().getId() : null;
+
+        OrderDetailDto orderDetail = new OrderDetailDto(
+                order.getId(),
+                order.getOrderNumber(),
+                order.getStatus(),
+                customerId,
+                customerName,
+                customerEmail,
+                customerPhone,
+                order.getSubtotal() != null ? order.getSubtotal() : BigDecimal.ZERO,
+                order.getDiscountsTotal() != null ? order.getDiscountsTotal() : BigDecimal.ZERO,
+                order.getTaxesTotal() != null ? order.getTaxesTotal() : BigDecimal.ZERO,
+                order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO,
+                order.getCurrency() != null ? order.getCurrency() : "PKR",
+                order.getPlacedAt(),
+                order.getFulfilledAt(),
+                itemDtos
+        );
+
+        return ResponseEntity.ok(orderDetail);
+    }
+
     @GetMapping("/orders")
     public ResponseEntity<?> getOrders(HttpServletRequest request) {
         User user = getCurrentUser(request);
@@ -123,9 +197,28 @@ public class OrderController {
             order.setStatus(status);
 
             // Handle Customer (Optional)
+            // Priority: 1) customerId (existing), 2) customer data (create new), 3) null (walk-in)
             if (payload.containsKey("customerId") && payload.get("customerId") != null) {
+                // Use existing customer
                 UUID customerId = UUID.fromString((String) payload.get("customerId"));
                 customerRepository.findById(customerId).ifPresent(order::setCustomer);
+            } else if (payload.containsKey("customer") && payload.get("customer") != null) {
+                // Create new customer during order processing (NO duplicate checks)
+                @SuppressWarnings("unchecked")
+                Map<String, Object> customerData = (Map<String, Object>) payload.get("customer");
+                
+                Customer newCustomer = new Customer();
+                newCustomer.setName(customerData.get("name") != null ? customerData.get("name").toString() : "Customer");
+                newCustomer.setPhone(customerData.containsKey("phone") && customerData.get("phone") != null 
+                    ? customerData.get("phone").toString() : null);
+                newCustomer.setEmail(customerData.containsKey("email") && customerData.get("email") != null 
+                    ? customerData.get("email").toString() : null);
+                newCustomer.setMerchant(user.getMerchant());
+                newCustomer.setStore(currentStore);
+                
+                // Save customer (no duplicate checks - always create new)
+                Customer savedCustomer = customerRepository.save(newCustomer);
+                order.setCustomer(savedCustomer);
             }
             // Else: customer remains null (Walk-in)
 

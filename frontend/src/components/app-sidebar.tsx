@@ -64,12 +64,23 @@ const data = {
       url: "#",
       icon: IconFileInvoice,
     },
+    {
+      title: "Customers",
+      url: "#",
+      icon: IconUsersGroup,
+    },
   ],
   navSecondary: [
     {
       title: "Manage Employees",
       url: "#",
       icon: IconUsersGroup,
+      adminOnly: true,
+    },
+    {
+      title: "Manage Stores",
+      url: "#",
+      icon: IconDatabase,
       adminOnly: true,
     },
     {

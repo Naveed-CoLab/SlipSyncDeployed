@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useOrganization, useOrganizationList, useSession } from '@clerk/clerk-react'
-import { Toaster } from 'sonner'
+import { Toaster, toast } from 'sonner'
 
 import { ChartAreaInteractive } from '@/components/chart-area-interactive'
 import { EmptyState } from '@/components/empty-state'
 import { OrderProcessing } from '@/components/order-processing'
 import { ManageEmployees } from '@/components/manage-employees'
+import { ProductManagement } from '@/components/product-management'
+import { ManageStores } from '@/components/manage-stores'
+import { CustomerManagement } from '@/components/customer-management'
+import { OrderReceipt } from '@/components/order-receipt'
 import { SectionCards } from '@/components/section-cards'
 import { SiteHeader } from '@/components/site-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -66,6 +70,7 @@ function App() {
   const [productsOverview, setProductsOverview] = useState<ProductInventoryEntry[]>([])
   const [invoices, setInvoices] = useState<InvoiceSummary[]>([])
   const [deviceStatus, setDeviceStatus] = useState<DeviceStatus | null>(null)
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [dataVersion, setDataVersion] = useState(0)
@@ -176,7 +181,6 @@ function App() {
                   // Store role from sync response
                   if (syncData.roleName) {
                     setDbUserRole(syncData.roleName)
-                    console.log('✅ [App] Role from sync response:', syncData.roleName)
                   }
                 }
 
@@ -191,14 +195,13 @@ function App() {
                     const meData = await meRes.json()
                     if (meData.roleName) {
                       setDbUserRole(meData.roleName)
-                      console.log('✅ [App] Role from /api/auth/me:', meData.roleName)
                     }
                   }
                 } catch (meErr) {
-                  console.warn('Failed to fetch role from /api/auth/me:', meErr)
+                  // Silently fail - role will fallback to Clerk role
                 }
               } catch (err) {
-                console.error('Failed to sync user with backend', err)
+                // Silently fail - user can still use the app
               }
             }
 
@@ -284,7 +287,7 @@ function App() {
           persistStoreSelection(nextStoreId)
         }
       } catch (err) {
-        console.error(err)
+        toast.error('Failed to load stores')
       } finally {
         if (!canceled) {
           setStoresLoading(false)
@@ -356,8 +359,9 @@ function App() {
         setInvoices(invoicesJson)
         setDeviceStatus(devicesJson)
       } catch (err) {
-        console.error(err)
-        setError(err instanceof Error ? err.message : 'Failed to load dashboard data')
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load dashboard data'
+        setError(errorMessage)
+        toast.error(errorMessage)
       } finally {
         setLoading(false)
       }
@@ -404,7 +408,6 @@ function App() {
   const totalSkus = productsOverview.length
   const hasOrders = orders.length > 0
   const isLoadingDashboard = loading && !error
-  const canManagePos = userRole ? ['org:admin', 'org:employee'].includes(userRole) : true
   const refreshStoreData = useCallback(() => {
     setDataVersion((prev) => prev + 1)
   }, [])
@@ -421,8 +424,8 @@ function App() {
 
   if (isDashboard) {
     pageContent = (
-      <div className="flex-1 px-4 pb-12 pt-4 lg:px-8 lg:pt-6">
-        <div className="flex flex-col gap-6">
+      <div className="flex-1 px-4 pb-12 pt-4 lg:px-8 lg:pt-6 overflow-x-hidden">
+        <div className="flex flex-col gap-6 w-full max-w-full">
           {isLoadingDashboard ? (
             <SectionCardsSkeleton />
           ) : (
@@ -447,7 +450,18 @@ function App() {
               )}
             </CardHeader>
             <CardContent>
-              {isLoadingDashboard ? <ChartSkeleton /> : <ChartAreaInteractive />}
+              {isLoadingDashboard ? (
+                <ChartSkeleton />
+              ) : (
+                <ChartAreaInteractive
+                  apiBaseUrl={API_BASE_URL}
+                  token={apiToken}
+                  storeId={activeStoreId}
+                  currency={storeCurrency}
+                  userRole={userRole}
+                  storeAccess={storeAccess}
+                />
+              )}
             </CardContent>
           </Card>
 
@@ -570,28 +584,14 @@ function App() {
     )
   } else if (normalizedRoute === '/products') {
     pageContent = (
-      <div className="flex-1 px-4 pb-12 pt-4 lg:px-8 lg:pt-6">
-        <Card className="rounded-3xl border border-border/70 bg-card/80 shadow-sm backdrop-blur">
-          <CardHeader className="flex flex-col gap-1">
-            <CardTitle className="text-xl font-semibold">Products</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              All products synced from the current store inventory.
-            </p>
-          </CardHeader>
-          <CardContent>
-            {isLoadingDashboard ? (
-              <TableSkeleton rows={6} />
-            ) : productsOverview.length ? (
-              <ProductsTable items={productsOverview} currency={storeCurrency} />
-            ) : (
-              <EmptyState
-                title="No products found"
-                description="Create a product in Quick Create to see it appear here."
-              />
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      <ProductManagement
+        apiBaseUrl={API_BASE_URL}
+        token={apiToken}
+        storeId={activeStoreId}
+        currency={storeCurrency}
+        userRole={userRole}
+        storeAccess={storeAccess}
+      />
     )
   } else if (normalizedRoute === '/orders') {
     pageContent = (
@@ -607,7 +607,11 @@ function App() {
             {isLoadingDashboard ? (
               <TableSkeleton rows={8} />
             ) : hasOrders ? (
-              <OrdersTable orders={orders} currency={storeCurrency} />
+              <OrdersTable
+                orders={orders}
+                currency={storeCurrency}
+                onOrderClick={(orderId) => setSelectedOrderId(orderId)}
+              />
             ) : (
               <EmptyState
                 title="No orders yet"
@@ -616,6 +620,18 @@ function App() {
             )}
           </CardContent>
         </Card>
+        <OrderReceipt
+          apiBaseUrl={API_BASE_URL}
+          token={apiToken}
+          orderId={selectedOrderId}
+          currency={storeCurrency}
+          open={selectedOrderId !== null}
+          onOpenChange={(open) => {
+            if (!open) setSelectedOrderId(null)
+          }}
+          userRole={userRole}
+          storeAccess={storeAccess}
+        />
       </div>
     )
   } else if (normalizedRoute === '/invoices') {
@@ -653,7 +669,6 @@ function App() {
           storeName={activeStore?.name}
           products={productsOverview}
           currency={storeCurrency}
-          canManage={canManagePos}
           userRole={userRole}
           storeAccess={storeAccess}
           onRefresh={refreshStoreData}
@@ -665,6 +680,29 @@ function App() {
       <ManageEmployees
         apiBaseUrl={API_BASE_URL}
         token={apiToken}
+        userRole={userRole}
+        storeAccess={storeAccess}
+      />
+    )
+  } else if (normalizedRoute === '/manage-stores') {
+    pageContent = (
+      <ManageStores
+        apiBaseUrl={API_BASE_URL}
+        token={apiToken}
+        userRole={userRole}
+        storeAccess={storeAccess}
+        onStoreDeleted={() => {
+          setStoresVersion((v) => v + 1)
+          refreshStoreData()
+        }}
+      />
+    )
+  } else if (normalizedRoute === '/customers') {
+    pageContent = (
+      <CustomerManagement
+        apiBaseUrl={API_BASE_URL}
+        token={apiToken}
+        storeId={activeStoreId}
         userRole={userRole}
         storeAccess={storeAccess}
       />
@@ -761,14 +799,17 @@ function OrdersTable({
   orders,
   currency,
   limit,
+  onOrderClick,
 }: {
   orders: OrderSummary[]
   currency: string
   limit?: number
+  onOrderClick?: (orderId: string) => void
 }) {
   const rows = typeof limit === 'number' ? orders.slice(0, limit) : orders
   return (
-    <Table>
+    <div className="overflow-x-auto">
+      <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Order</TableHead>
@@ -780,7 +821,11 @@ function OrdersTable({
       </TableHeader>
       <TableBody>
         {rows.map((order) => (
-          <TableRow key={order.id}>
+          <TableRow
+            key={order.id}
+            className={onOrderClick ? 'cursor-pointer hover:bg-muted/50' : ''}
+            onClick={() => onOrderClick?.(order.id)}
+          >
             <TableCell>
               <div className="font-semibold">{order.orderNumber}</div>
               <div className="text-xs text-muted-foreground">{order.customerName}</div>
@@ -804,6 +849,7 @@ function OrdersTable({
         ))}
       </TableBody>
     </Table>
+    </div>
   )
 }
 
@@ -818,7 +864,8 @@ function ProductsTable({
 }) {
   const rows = typeof limit === 'number' ? items.slice(0, limit) : items
   return (
-    <Table>
+    <div className="overflow-x-auto">
+      <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Product</TableHead>
@@ -855,13 +902,15 @@ function ProductsTable({
         })}
       </TableBody>
     </Table>
+    </div>
   )
 }
 
 function InvoicesTable({ invoices, limit }: { invoices: InvoiceSummary[]; limit?: number }) {
   const rows = typeof limit === 'number' ? invoices.slice(0, limit) : invoices
   return (
-    <Table>
+    <div className="overflow-x-auto">
+      <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Invoice</TableHead>
@@ -885,5 +934,6 @@ function InvoicesTable({ invoices, limit }: { invoices: InvoiceSummary[]; limit?
         ))}
       </TableBody>
     </Table>
+    </div>
   )
 }
