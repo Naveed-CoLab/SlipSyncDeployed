@@ -1,12 +1,14 @@
 import {
   IconCreditCard,
   IconDotsVertical,
+  IconKey,
   IconLogout,
   IconNotification,
   IconUserCircle,
 } from "@tabler/icons-react"
 
-import { useClerk } from "@clerk/clerk-react"
+import { useClerk, useSession } from "@clerk/clerk-react"
+import { useState } from "react"
 
 import {
   Avatar,
@@ -41,6 +43,27 @@ export function NavUser({
 }) {
   const { isMobile } = useSidebar()
   const { signOut, openOrganizationProfile, openUserProfile } = useClerk()
+  const { session } = useSession()
+  const [tokenCopied, setTokenCopied] = useState(false)
+
+  async function handleCopyToken(event: Event) {
+    event.preventDefault()
+    if (!session) return
+
+    const token = await session.getToken()
+    if (!token) {
+      alert("Unable to fetch token. Make sure you are signed in.")
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(token)
+      setTokenCopied(true)
+      setTimeout(() => setTokenCopied(false), 2000)
+    } catch {
+      alert(token)
+    }
+  }
 
   return (
     <SidebarMenu>
@@ -107,6 +130,20 @@ export function NavUser({
               >
                 <IconCreditCard />
                 Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  handleCopyToken(event)
+                }}
+                className="justify-between"
+              >
+                <span className="flex items-center gap-2">
+                  <IconKey />
+                  API Token
+                </span>
+                {tokenCopied && (
+                  <span className="text-xs text-muted-foreground">Copied</span>
+                )}
               </DropdownMenuItem>
               <DropdownMenuItem>
                 <IconNotification />
