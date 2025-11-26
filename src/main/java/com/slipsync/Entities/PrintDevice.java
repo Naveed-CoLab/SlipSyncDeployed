@@ -30,4 +30,7 @@ public class PrintDevice {
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "api_secret")
+    private String apiSecret; 
 }

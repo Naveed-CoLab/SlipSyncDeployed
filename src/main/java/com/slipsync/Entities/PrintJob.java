@@ -25,9 +25,9 @@ public class PrintJob {
     @JoinColumn(name = "store_id")
     private Store store;
 
-    @ManyToOne
+    
     @JoinColumn(name = "print_device_id")
-    private PrintDevice printDevice;
+    private String printDeviceId;
 
     @Column(name = "job_type")
     private String jobType; // receipt, label

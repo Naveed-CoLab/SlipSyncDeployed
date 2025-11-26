@@ -9,5 +9,6 @@ import java.util.UUID;
 
 public interface PrintDeviceRepository extends JpaRepository<PrintDevice, UUID> {
     Optional<PrintDevice> findByDeviceIdentifier(String deviceIdentifier);
+    Optional<PrintDevice> findByApiSecret(String apiSecret);
     List<PrintDevice> findByMerchantId(String merchantId);
 }
