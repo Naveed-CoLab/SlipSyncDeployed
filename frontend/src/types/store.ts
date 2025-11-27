@@ -4,5 +4,7 @@ export interface StoreSummary {
   address?: string
   currency?: string
   isVerified?: boolean
+  orgId?: string
+  orgName?: string
 }
 

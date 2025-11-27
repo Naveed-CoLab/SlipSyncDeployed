@@ -15,8 +15,8 @@ import {
 const linkMap: Record<string, string> = {
   "Manage Employees": "/manage-employees",
   "Manage Stores": "/manage-stores",
-  "Support": "#",
-  "Reports": "#",
+  "Support": "/support",
+  "Reports": "/reports",
 }
 
 export function NavSecondary({
@@ -40,7 +40,7 @@ export function NavSecondary({
     const role = userRole.toLowerCase()
     return role === 'org:admin' || role === 'admin'
   }, [userRole])
-  
+
   const [pathname, setPathname] = useState(
     typeof window !== "undefined" ? window.location.pathname : "/",
   )
@@ -64,7 +64,7 @@ export function NavSecondary({
             if (item.adminOnly && !isAdmin) {
               return null
             }
-            
+
             const href = linkMap[item.title] ?? item.url
             const isActive = pathname === href
 

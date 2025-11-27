@@ -170,42 +170,42 @@ function App() {
           headers['X-Clerk-Store-Access'] = storeAccess
         }
 
-                // Call backend sync so it can create Merchant + Store + User if needed
-                const syncRes = await fetch(`${API_BASE_URL}/api/auth/sync`, {
-                  method: 'POST',
-                  headers,
-                })
-                
-                if (syncRes.ok) {
-                  const syncData = await syncRes.json()
-                  // Store role from sync response
-                  if (syncData.roleName) {
-                    setDbUserRole(syncData.roleName)
-                  }
-                }
+        // Call backend sync so it can create Merchant + Store + User if needed
+        const syncRes = await fetch(`${API_BASE_URL}/api/auth/sync`, {
+          method: 'POST',
+          headers,
+        })
 
-                // Also fetch role from /api/auth/me endpoint (more reliable)
-                try {
-                  const meRes = await fetch(`${API_BASE_URL}/api/auth/me`, {
-                    headers: {
-                      Authorization: `Bearer ${token}`,
-                    },
-                  })
-                  if (meRes.ok) {
-                    const meData = await meRes.json()
-                    if (meData.roleName) {
-                      setDbUserRole(meData.roleName)
-                    }
-                  }
-                } catch (meErr) {
-                  // Silently fail - role will fallback to Clerk role
-                }
-              } catch (err) {
-                // Silently fail - user can still use the app
-              }
+        if (syncRes.ok) {
+          const syncData = await syncRes.json()
+          // Store role from sync response
+          if (syncData.roleName) {
+            setDbUserRole(syncData.roleName)
+          }
+        }
+
+        // Also fetch role from /api/auth/me endpoint (more reliable)
+        try {
+          const meRes = await fetch(`${API_BASE_URL}/api/auth/me`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          })
+          if (meRes.ok) {
+            const meData = await meRes.json()
+            if (meData.roleName) {
+              setDbUserRole(meData.roleName)
             }
+          }
+        } catch (meErr) {
+          // Silently fail - role will fallback to Clerk role
+        }
+      } catch (err) {
+        // Silently fail - user can still use the app
+      }
+    }
 
-            void syncAndSetToken()
+    void syncAndSetToken()
 
     return () => {
       canceled = true
@@ -248,16 +248,16 @@ function App() {
     async function fetchStores() {
       try {
         setStoresLoading(true)
-        
+
         // Build headers with role and store_access
         const headers: HeadersInit = {
           Authorization: `Bearer ${apiToken}`,
         }
-        
+
         if (userRole) {
           headers['X-Clerk-Org-Role'] = userRole
         }
-        
+
         if (storeAccess) {
           headers['X-Clerk-Store-Access'] = storeAccess
         }
@@ -316,11 +316,11 @@ function App() {
       Authorization: `Bearer ${apiToken}`,
       'X-Store-Id': activeStoreId,
     }
-    
+
     if (userRole) {
       headers['X-Clerk-Org-Role'] = userRole
     }
-    
+
     if (storeAccess) {
       headers['X-Clerk-Store-Access'] = storeAccess
     }
@@ -429,11 +429,11 @@ function App() {
           {isLoadingDashboard ? (
             <SectionCardsSkeleton />
           ) : (
-              <SectionCards
-                totalRevenueToday={totalRevenueToday}
-                ordersToday={todaysOrders.length}
-                activePrinters={deviceStatus?.activeDevices ?? 0}
-                lowStockItems={lowStockItems}
+            <SectionCards
+              totalRevenueToday={totalRevenueToday}
+              ordersToday={todaysOrders.length}
+              activePrinters={deviceStatus?.activeDevices ?? 0}
+              lowStockItems={lowStockItems}
               currencyCode={storeCurrency}
             />
           )}
@@ -490,15 +490,14 @@ function App() {
                 )}
               </CardContent>
             </Card>
-
             <Card className="rounded-3xl border border-border/70 bg-card/80 shadow-sm backdrop-blur">
-                  <CardHeader>
+              <CardHeader>
                 <CardTitle className="text-lg font-semibold">Store insights</CardTitle>
                 {activeStore?.name && (
                   <p className="text-sm text-muted-foreground">{activeStore.name}</p>
                 )}
-                  </CardHeader>
-                  <CardContent>
+              </CardHeader>
+              <CardContent>
                 {isLoadingDashboard ? (
                   <StoreInsightsSkeleton />
                 ) : activeStore ? (
@@ -522,15 +521,15 @@ function App() {
                       </div>
                     </div>
                   </dl>
-                    ) : (
+                ) : (
                   <EmptyState
                     title="No store selected"
                     description="Choose a store from the sidebar to see merchant insights."
                   />
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card className="rounded-3xl border border-border/70 bg-card/80 shadow-sm backdrop-blur">
@@ -665,6 +664,7 @@ function App() {
         <OrderProcessing
           apiBaseUrl={API_BASE_URL}
           token={apiToken}
+          merchantName={merchantName}
           storeId={activeStoreId}
           storeName={activeStore?.name}
           products={productsOverview}
@@ -714,7 +714,7 @@ function App() {
           title="Page not found"
           description="The page you requested does not exist. Use the sidebar to navigate."
         />
-    </div>
+      </div>
     )
   }
 
@@ -810,45 +810,45 @@ function OrdersTable({
   return (
     <div className="overflow-x-auto">
       <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Order</TableHead>
-          <TableHead>Items</TableHead>
-          <TableHead>Total</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Date</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((order) => (
-          <TableRow
-            key={order.id}
-            className={onOrderClick ? 'cursor-pointer hover:bg-muted/50' : ''}
-            onClick={() => onOrderClick?.(order.id)}
-          >
-            <TableCell>
-              <div className="font-semibold">{order.orderNumber}</div>
-              <div className="text-xs text-muted-foreground">{order.customerName}</div>
-            </TableCell>
-            <TableCell>{order.itemCount}</TableCell>
-            <TableCell className="font-semibold">
-              {formatCurrencyValue(
-                normalizeAmount(order.totalAmount),
-                order.currency || currency,
-              )}
-            </TableCell>
-            <TableCell>
-              <Badge variant="outline" className="capitalize">
-                {order.status}
-              </Badge>
-            </TableCell>
-            <TableCell className="text-muted-foreground text-sm">
-              {formatDate(order.placedAt)}
-            </TableCell>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Order</TableHead>
+            <TableHead>Items</TableHead>
+            <TableHead>Total</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Date</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {rows.map((order) => (
+            <TableRow
+              key={order.id}
+              className={onOrderClick ? 'cursor-pointer hover:bg-muted/50' : ''}
+              onClick={() => onOrderClick?.(order.id)}
+            >
+              <TableCell>
+                <div className="font-semibold">{order.orderNumber}</div>
+                <div className="text-xs text-muted-foreground">{order.customerName}</div>
+              </TableCell>
+              <TableCell>{order.itemCount}</TableCell>
+              <TableCell className="font-semibold">
+                {formatCurrencyValue(
+                  normalizeAmount(order.totalAmount),
+                  order.currency || currency,
+                )}
+              </TableCell>
+              <TableCell>
+                <Badge variant="outline" className="capitalize">
+                  {order.status}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-muted-foreground text-sm">
+                {formatDate(order.placedAt)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   )
 }
@@ -866,42 +866,42 @@ function ProductsTable({
   return (
     <div className="overflow-x-auto">
       <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Product</TableHead>
-          <TableHead>SKU</TableHead>
-          <TableHead>Price</TableHead>
-          <TableHead>Stock</TableHead>
-          <TableHead>Status</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((entry) => {
-          const lowStock =
-            entry.reorderPoint != null && entry.reorderPoint > 0 && entry.quantity <= entry.reorderPoint
-          return (
-            <TableRow key={entry.inventoryId ?? entry.variantId}>
-              <TableCell>
-                <div className="font-semibold">{entry.productName}</div>
-                <div className="text-xs text-muted-foreground">
-                  Added {formatDate(entry.createdAt)}
-                </div>
-              </TableCell>
-              <TableCell>{entry.sku || '—'}</TableCell>
-              <TableCell className="font-semibold">
-                {formatCurrencyValue(normalizeAmount(entry.price), currency)}
-              </TableCell>
-              <TableCell>{entry.quantity}</TableCell>
-              <TableCell>
-                <Badge variant={lowStock ? 'destructive' : 'secondary'}>
-                  {lowStock ? 'Low stock' : 'In stock'}
-                </Badge>
-              </TableCell>
-            </TableRow>
-          )
-        })}
-      </TableBody>
-    </Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Product</TableHead>
+            <TableHead>SKU</TableHead>
+            <TableHead>Price</TableHead>
+            <TableHead>Stock</TableHead>
+            <TableHead>Status</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((entry) => {
+            const lowStock =
+              entry.reorderPoint != null && entry.reorderPoint > 0 && entry.quantity <= entry.reorderPoint
+            return (
+              <TableRow key={entry.inventoryId ?? entry.variantId}>
+                <TableCell>
+                  <div className="font-semibold">{entry.productName}</div>
+                  <div className="text-xs text-muted-foreground">
+                    Added {formatDate(entry.createdAt)}
+                  </div>
+                </TableCell>
+                <TableCell>{entry.sku || '—'}</TableCell>
+                <TableCell className="font-semibold">
+                  {formatCurrencyValue(normalizeAmount(entry.price), currency)}
+                </TableCell>
+                <TableCell>{entry.quantity}</TableCell>
+                <TableCell>
+                  <Badge variant={lowStock ? 'destructive' : 'secondary'}>
+                    {lowStock ? 'Low stock' : 'In stock'}
+                  </Badge>
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
     </div>
   )
 }
@@ -911,29 +911,29 @@ function InvoicesTable({ invoices, limit }: { invoices: InvoiceSummary[]; limit?
   return (
     <div className="overflow-x-auto">
       <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Invoice</TableHead>
-          <TableHead>Order</TableHead>
-          <TableHead>Total</TableHead>
-          <TableHead>Issued</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((invoice) => (
-          <TableRow key={invoice.id}>
-            <TableCell>
-              <div className="font-semibold">{invoice.invoiceNumber}</div>
-            </TableCell>
-            <TableCell>{invoice.orderNumber ?? '—'}</TableCell>
-            <TableCell className="font-semibold">
-              {formatCurrencyValue(normalizeAmount(invoice.total), invoice.currency)}
-            </TableCell>
-            <TableCell className="text-sm text-muted-foreground">{formatDate(invoice.issuedAt)}</TableCell>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Invoice</TableHead>
+            <TableHead>Order</TableHead>
+            <TableHead>Total</TableHead>
+            <TableHead>Issued</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {rows.map((invoice) => (
+            <TableRow key={invoice.id}>
+              <TableCell>
+                <div className="font-semibold">{invoice.invoiceNumber}</div>
+              </TableCell>
+              <TableCell>{invoice.orderNumber ?? '—'}</TableCell>
+              <TableCell className="font-semibold">
+                {formatCurrencyValue(normalizeAmount(invoice.total), invoice.currency)}
+              </TableCell>
+              <TableCell className="text-sm text-muted-foreground">{formatDate(invoice.issuedAt)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   )
 }

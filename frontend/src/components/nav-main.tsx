@@ -50,7 +50,7 @@ export function NavMain({
     const role = userRole.toLowerCase()
     return role === 'org:admin' || role === 'admin'
   }, [userRole])
-  
+
   const { session } = useSession()
   const [isOpen, setIsOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -58,6 +58,7 @@ export function NavMain({
   const [address, setAddress] = useState("")
   const [phone, setPhone] = useState("")
   const [currency, setCurrency] = useState("PKR")
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const [pathname, setPathname] = useState(
     typeof window !== "undefined" ? window.location.pathname : "/",
   )
@@ -74,7 +75,25 @@ export function NavMain({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!session || !name.trim()) return
+    if (!session) return
+
+    // Validation
+    const newErrors: Record<string, string> = {}
+    if (!name.trim()) {
+      newErrors.name = "Store name is required"
+    }
+    if (phone.trim() && !/^\+?[\d\s-]+$/.test(phone.trim())) {
+      newErrors.phone = "Invalid phone number format"
+    }
+    if (currency.trim() && !/^[A-Z]{3}$/.test(currency.trim())) {
+      newErrors.currency = "Currency must be 3 letters (e.g. USD)"
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      return
+    }
+    setErrors({})
 
     const token = await session.getToken()
     if (!token) return
@@ -102,6 +121,7 @@ export function NavMain({
       setAddress("")
       setPhone("")
       setCurrency("PKR")
+      setErrors({})
 
       window.dispatchEvent(new CustomEvent("slipsync:store-created"))
     } catch (e) {
@@ -121,7 +141,10 @@ export function NavMain({
                 <SidebarMenuButton
                   tooltip="Create Store"
                   className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground min-w-8 duration-200 ease-linear"
-                  onClick={() => setIsOpen(true)}
+                  onClick={() => {
+                    setIsOpen(true)
+                    setErrors({})
+                  }}
                 >
                   <IconCirclePlusFilled />
                   <span>Create Store</span>
@@ -135,7 +158,7 @@ export function NavMain({
               const isActive = pathname === href
 
               return (
-              <SidebarMenuItem key={item.title}>
+                <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
                     tooltip={item.title}
@@ -153,10 +176,10 @@ export function NavMain({
                       }}
                     >
                       {item.icon && <item.icon className="size-4" />}
-                  <span>{item.title}</span>
+                      <span>{item.title}</span>
                     </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               )
             })}
           </SidebarMenu>
@@ -174,10 +197,15 @@ export function NavMain({
               <Input
                 id="store-name"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value)
+                  if (errors.name) setErrors({ ...errors, name: "" })
+                }}
                 required
                 placeholder="Main Branch"
+                className={errors.name ? "border-destructive" : ""}
               />
+              {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="store-address">Address</Label>
@@ -193,18 +221,29 @@ export function NavMain({
               <Input
                 id="store-phone"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => {
+                  setPhone(e.target.value)
+                  if (errors.phone) setErrors({ ...errors, phone: "" })
+                }}
                 placeholder="+92 ..."
+                className={errors.phone ? "border-destructive" : ""}
               />
+              {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="store-currency">Currency</Label>
               <Input
                 id="store-currency"
                 value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
+                onChange={(e) => {
+                  setCurrency(e.target.value.toUpperCase())
+                  if (errors.currency) setErrors({ ...errors, currency: "" })
+                }}
                 placeholder="PKR"
+                maxLength={3}
+                className={errors.currency ? "border-destructive" : ""}
               />
+              {errors.currency && <p className="text-sm text-destructive">{errors.currency}</p>}
             </div>
             <SheetFooter>
               <Button type="submit" disabled={isSubmitting}>

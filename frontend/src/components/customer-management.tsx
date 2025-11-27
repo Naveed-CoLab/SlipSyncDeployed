@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, User, History } from 'lucide-react'
+import { Plus, Pencil, Trash2, User } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
@@ -58,6 +58,7 @@ export function CustomerManagement({
 }: CustomerManagementProps) {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
+  const [deleting, setDeleting] = useState(false)
   const [authError, setAuthError] = useState(false)
 
   // Customer dialog state
@@ -68,6 +69,7 @@ export function CustomerManagement({
     email: '',
     phone: '',
   })
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   // Delete confirmation dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -143,11 +145,28 @@ export function CustomerManagement({
     loadData()
   }, [token, userRole, storeAccess])
 
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {}
+    if (!customerForm.name.trim()) {
+      newErrors.name = 'Name is required'
+    }
+    if (customerForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerForm.email)) {
+      newErrors.email = 'Invalid email address'
+    }
+    if (customerForm.phone && !/^\+?[\d\s-]+$/.test(customerForm.phone)) {
+      newErrors.phone = 'Invalid phone number'
+    }
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
   const handleCreateCustomer = async () => {
     if (!storeId) {
       toast.error('Please select a store first')
       return
     }
+    if (!validateForm()) return
+
     try {
       const response = await fetch(`${apiBaseUrl}/api/customers`, {
         method: 'POST',
@@ -166,6 +185,7 @@ export function CustomerManagement({
       toast.success('Customer created successfully')
       setCustomerDialogOpen(false)
       setCustomerForm({ name: '', email: '', phone: '' })
+      setErrors({})
       await fetchCustomers()
     } catch (error: any) {
       toast.error(error.message || 'Failed to create customer')
@@ -174,6 +194,8 @@ export function CustomerManagement({
 
   const handleUpdateCustomer = async () => {
     if (!editingCustomer) return
+    if (!validateForm()) return
+
     try {
       const response = await fetch(`${apiBaseUrl}/api/customers/${editingCustomer.id}`, {
         method: 'PUT',
@@ -192,6 +214,7 @@ export function CustomerManagement({
       setCustomerDialogOpen(false)
       setEditingCustomer(null)
       setCustomerForm({ name: '', email: '', phone: '' })
+      setErrors({})
       await fetchCustomers()
     } catch (error: any) {
       toast.error(error.message || 'Failed to update customer')
@@ -243,6 +266,7 @@ export function CustomerManagement({
       setEditingCustomer(null)
       setCustomerForm({ name: '', email: '', phone: '' })
     }
+    setErrors({})
     setCustomerDialogOpen(true)
   }
 
@@ -380,9 +404,14 @@ export function CustomerManagement({
               <Input
                 id="name"
                 value={customerForm.name}
-                onChange={(e) => setCustomerForm({ ...customerForm, name: e.target.value })}
+                onChange={(e) => {
+                  setCustomerForm({ ...customerForm, name: e.target.value })
+                  if (errors.name) setErrors({ ...errors, name: '' })
+                }}
                 placeholder="Customer name"
+                className={errors.name ? 'border-destructive' : ''}
               />
+              {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
@@ -390,18 +419,28 @@ export function CustomerManagement({
                 id="email"
                 type="email"
                 value={customerForm.email}
-                onChange={(e) => setCustomerForm({ ...customerForm, email: e.target.value })}
+                onChange={(e) => {
+                  setCustomerForm({ ...customerForm, email: e.target.value })
+                  if (errors.email) setErrors({ ...errors, email: '' })
+                }}
                 placeholder="customer@example.com"
+                className={errors.email ? 'border-destructive' : ''}
               />
+              {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="phone">Phone</Label>
               <Input
                 id="phone"
                 value={customerForm.phone}
-                onChange={(e) => setCustomerForm({ ...customerForm, phone: e.target.value })}
+                onChange={(e) => {
+                  setCustomerForm({ ...customerForm, phone: e.target.value })
+                  if (errors.phone) setErrors({ ...errors, phone: '' })
+                }}
                 placeholder="+1234567890"
+                className={errors.phone ? 'border-destructive' : ''}
               />
+              {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
             </div>
           </div>
           <DialogFooter>
