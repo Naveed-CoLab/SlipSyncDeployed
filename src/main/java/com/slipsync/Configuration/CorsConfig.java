@@ -14,7 +14,12 @@ public class CorsConfig {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/api/**")
-                        .allowedOrigins("http://localhost:5173")
+                        // Local dev frontend
+                        .allowedOrigins(
+                                "http://localhost:5173",
+                                // Render frontend
+                                "https://slipsyncdeployed-1.onrender.com"
+                        )
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                         .allowedHeaders("*")
                         .exposedHeaders("X-Store-Id")
