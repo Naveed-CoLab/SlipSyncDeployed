@@ -123,11 +123,10 @@ function App() {
 
   // Use role from database (preferred) or fallback to Clerk organization role
   const userRole = useMemo(() => {
-    // Prefer database role, fallback to Clerk role
-    const role = dbUserRole || currentMembership?.role || organization?.membership?.role || null
-    console.log('🔍 [App] Role sources - DB:', dbUserRole, 'org.membership:', organization?.membership?.role, 'currentMembership:', currentMembership?.role, 'final:', role)
+    // Prefer database role, fallback to Clerk organization membership role (via currentMembership)
+    const role = dbUserRole || currentMembership?.role || null
     return role
-  }, [dbUserRole, currentMembership?.role, organization?.membership?.role])
+  }, [dbUserRole, currentMembership?.role])
 
   const storeAccess = useMemo(() => {
     // Get store_access from organization metadata (publicMetadata)

@@ -126,7 +126,7 @@ export function OrderReceipt({
         .then((data) => {
           setOrderDetail(data)
         })
-        .catch((error) => {
+        .catch(() => {
           toast.error('Failed to load order details')
         })
         .finally(() => {

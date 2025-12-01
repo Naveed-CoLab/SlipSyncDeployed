@@ -116,7 +116,7 @@ export function NavUser({
               <DropdownMenuItem
                 onSelect={(event) => {
                   event.preventDefault()
-                  openOrganizationProfile()
+                  openOrganizationProfile?.()
                 }}
               >
                 <IconUserCircle />
@@ -125,7 +125,7 @@ export function NavUser({
               <DropdownMenuItem
                 onSelect={(event) => {
                   event.preventDefault()
-                  openUserProfile()
+                  openUserProfile?.()
                 }}
               >
                 <IconCreditCard />
