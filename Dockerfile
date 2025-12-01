@@ -1,8 +1,16 @@
 FROM maven:3.9.9-eclipse-temurin-17 AS build
 WORKDIR /app
 
-# Copy everything and build the Spring Boot JAR.
-# The Clerk Java SDK JAR will be provided in the local libs/ folder (see pom.xml).
+# First copy the Clerk backend-api JAR and install it into the local Maven repository
+COPY libs/backend-api-3.2.0.jar ./libs/backend-api-3.2.0.jar
+RUN mvn install:install-file \
+    -Dfile=libs/backend-api-3.2.0.jar \
+    -DgroupId=com.clerk \
+    -DartifactId=backend-api \
+    -Dversion=3.2.0 \
+    -Dpackaging=jar
+
+# Now copy the rest of the project and build the Spring Boot JAR.
 COPY . .
 RUN chmod +x mvnw && ./mvnw clean package -DskipTests
 

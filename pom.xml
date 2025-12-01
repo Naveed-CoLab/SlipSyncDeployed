@@ -58,14 +58,11 @@
             <version>0.12.5</version>
             <scope>runtime</scope>
         </dependency>
-        <!-- Clerk Java SDK: provided via a local JAR in libs/backend-api-3.2.0.jar
-             Make sure to place backend-api-3.2.0.jar at ${project.basedir}/libs/backend-api-3.2.0.jar. -->
+        <!-- Clerk Java SDK: resolved from local Maven repo (installed during Docker build) -->
         <dependency>
             <groupId>com.clerk</groupId>
             <artifactId>backend-api</artifactId>
             <version>3.2.0</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/libs/backend-api-3.2.0.jar</systemPath>
         </dependency>
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
