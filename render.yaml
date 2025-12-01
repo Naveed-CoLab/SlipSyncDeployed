@@ -1,0 +1,66 @@
+services:
+  # --- Backend API (Spring Boot) ---
+  - type: web
+    name: slipsync-backend
+    env: java
+    plan: free
+    rootDir: .
+    buildCommand: chmod +x mvnw && ./mvnw clean package -DskipTests
+    startCommand: java -jar target/*.jar
+    autoDeploy: true
+    envVars:
+      # Supabase connection details – set these in the Render dashboard from your Supabase connection string.
+      # Example URL (pooled): jdbc:postgresql://aws-1-xxx.supabase.com:6543/postgres?sslmode=require
+      - key: SPRING_DATASOURCE_URL
+        sync: false
+      - key: SPRING_DATASOURCE_USERNAME
+        sync: false
+      - key: SPRING_DATASOURCE_PASSWORD
+        sync: false
+
+      # Clerk secret key (set this in the Render dashboard from Clerk)
+      - key: CLERK_SECRET_KEY
+        sync: false
+
+  # --- Frontend (Vite React, built and served as static site) ---
+  - type: static_site
+    name: slipsync-frontend
+    env: node
+    plan: free
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    publishPath: dist
+    autoDeploy: true
+
+    envVars:
+      # Example: point the frontend to the backend API on Render
+      # Replace "slipsync-backend.onrender.com" with your actual backend URL after first deploy
+      - key: VITE_API_BASE_URL
+        value: https://slipsync-backend.onrender.com
+
+  # --- Optional: Agent service (commented out by default) ---
+  # Uncomment and adjust if/when you want to deploy the Slip-Sync-Agent submodule.
+  #
+  # - type: web
+  #   name: slipsync-agent
+  #   env: java
+  #   plan: free
+  #   rootDir: Slip-Sync-Agent/agent
+  #   buildCommand: ./mvnw clean package -DskipTests
+  #   startCommand: java -jar target/*.jar
+  #   autoDeploy: true
+  #   envVars:
+  #     - key: SPRING_DATASOURCE_URL
+  #       fromDatabase:
+  #         name: slipsync-db
+  #         property: connectionString
+  #     - key: SPRING_DATASOURCE_USERNAME
+  #       fromDatabase:
+  #         name: slipsync-db
+  #         property: user
+  #     - key: SPRING_DATASOURCE_PASSWORD
+  #       fromDatabase:
+  #         name: slipsync-db
+  #         property: password
+
+
