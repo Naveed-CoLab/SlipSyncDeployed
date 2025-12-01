@@ -2,11 +2,10 @@ services:
   # --- Backend API (Spring Boot) ---
   - type: web
     name: slipsync-backend
-    env: java
+    env: docker
     plan: free
     rootDir: .
-    buildCommand: chmod +x mvnw && ./mvnw clean package -DskipTests
-    startCommand: java -jar target/*.jar
+    dockerfilePath: ./Dockerfile
     autoDeploy: true
     envVars:
       # Supabase connection details – set these in the Render dashboard from your Supabase connection string.
