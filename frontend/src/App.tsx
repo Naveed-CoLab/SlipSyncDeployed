@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useOrganization, useOrganizationList, useSession } from '@clerk/clerk-react'
 import { Toaster, toast } from 'sonner'
-import { Download, BadgeCheck } from 'lucide-react'
+import { Download, BadgeCheck, FileText } from 'lucide-react'
 
+import { generateSalesReportPDF } from '@/utils/pdfGenerator'
 import { ChartAreaInteractive } from '@/components/chart-area-interactive'
 import { EmptyState } from '@/components/empty-state'
 import { OrderProcessing } from '@/components/order-processing'
@@ -504,6 +505,22 @@ function App() {
       toast.error('Unable to download CSV')
     }
   }, [apiToken, activeStoreId, buildHeaders])
+  const handleDownloadPdf = useCallback((range: 'daily' | 'monthly') => {
+    const summary = reports[range]
+    if (!summary || !activeStore) return
+
+    try {
+      generateSalesReportPDF(
+        summary,
+        activeStore.name,
+        storeCurrency
+      )
+      toast.success('PDF report downloaded')
+    } catch (error) {
+      console.error(error)
+      toast.error('Failed to generate PDF')
+    }
+  }, [reports, activeStore, storeCurrency])
 
   const layoutSidebarProps = {
     stores,
@@ -586,6 +603,15 @@ function App() {
                       >
                         <Download className="mr-2 size-4" />
                         Export CSV
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDownloadPdf(range)}
+                        disabled={fetchingReports || !summary}
+                      >
+                        <FileText className="mr-2 size-4" />
+                        Download PDF
                       </Button>
                     </div>
                   </div>

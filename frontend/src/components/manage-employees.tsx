@@ -1,13 +1,29 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Save, Loader2 } from 'lucide-react'
+import { Save, Loader2, Store as StoreIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/empty-state'
-import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { TableSkeleton } from "@/components/ui/table-skeleton"
 
 interface Employee {
   id: string
@@ -41,6 +57,10 @@ export function ManageEmployees({ apiBaseUrl, token, userRole, storeAccess }: Ma
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState<Record<string, boolean>>({})
   const [selectedStores, setSelectedStores] = useState<Record<string, Set<string>>>({})
+
+  // Dialog state
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
 
   useEffect(() => {
     if (!token) {
@@ -122,11 +142,12 @@ export function ManageEmployees({ apiBaseUrl, token, userRole, storeAccess }: Ma
     })
   }
 
-  const handleSave = async (employeeId: string) => {
-    if (!token) {
-      toast.error('Missing authentication token')
+  const handleSave = async () => {
+    if (!token || !editingEmployee) {
       return
     }
+
+    const employeeId = editingEmployee.id
 
     try {
       setSaving((prev) => ({ ...prev, [employeeId]: true }))
@@ -162,12 +183,18 @@ export function ManageEmployees({ apiBaseUrl, token, userRole, storeAccess }: Ma
       )
 
       toast.success('Store access updated successfully')
+      setIsDialogOpen(false)
     } catch (error) {
       console.error(error)
       toast.error(error instanceof Error ? error.message : 'Failed to update store access')
     } finally {
       setSaving((prev) => ({ ...prev, [employeeId]: false }))
     }
+  }
+
+  const openManageDialog = (employee: Employee) => {
+    setEditingEmployee(employee)
+    setIsDialogOpen(true)
   }
 
   // Show error if backend returned 403 or any other error
@@ -195,46 +222,8 @@ export function ManageEmployees({ apiBaseUrl, token, userRole, storeAccess }: Ma
             <CardTitle className="text-lg font-semibold">Manage Employees</CardTitle>
             <CardDescription className="text-sm">Loading employee data...</CardDescription>
           </CardHeader>
-          <CardContent className="pt-0">
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <Card key={i} className="border border-border/60">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Skeleton className="h-5 w-32" />
-                          <Skeleton className="h-5 w-16 rounded-full" />
-                        </div>
-                        <Skeleton className="h-3 w-48" />
-                      </div>
-                      <Skeleton className="h-5 w-16 rounded-full" />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <div className="space-y-3">
-                      <div>
-                        <Skeleton className="h-3 w-24 mb-2" />
-                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                          {[1, 2, 3].map((j) => (
-                            <div key={j} className="flex items-start gap-2.5 rounded-lg border border-border/60 p-2.5">
-                              <Skeleton className="h-4 w-4 mt-0.5" />
-                              <div className="flex-1">
-                                <Skeleton className="h-4 w-24 mb-1" />
-                                <Skeleton className="h-3 w-32" />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-end border-t border-border/60 pt-3">
-                        <Skeleton className="h-8 w-24" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+          <CardContent>
+            <TableSkeleton columnCount={4} rowCount={5} />
           </CardContent>
         </Card>
       </div>
@@ -257,130 +246,140 @@ export function ManageEmployees({ apiBaseUrl, token, userRole, storeAccess }: Ma
               description="Employees will appear here once they are added to your organization in Clerk."
             />
           ) : (
-            <div className="space-y-4">
-              {employees.map((employee) => {
-                const employeeStores = selectedStores[employee.id] || new Set<string>()
-                const hasChanges =
-                  JSON.stringify(Array.from(employeeStores).sort()) !==
-                  JSON.stringify(employee.storeAccess.sort())
-                const isSaving = saving[employee.id] || false
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Store Access</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {employees.map((employee) => {
+                  const cleanName = (employee.fullName || employee.email || 'Unknown')
+                    .replace(/Optional\[/gi, '')
+                    .replace(/\]/g, '')
+                    .replace(/\s+/g, ' ')
+                    .trim() || employee.email
 
-                // Clean up fullName - remove "Optional" text and brackets
-                const cleanName = (employee.fullName || employee.email || 'Unknown')
-                  .replace(/Optional\[/gi, '')
-                  .replace(/\]/g, '')
-                  .replace(/\s+/g, ' ')
-                  .trim() || employee.email
-
-                return (
-                  <Card key={employee.id} className="border border-border/60">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <CardTitle className="text-base font-semibold truncate">
-                              {cleanName}
-                            </CardTitle>
-                            {employee.roleName && (
-                              <Badge
-                                variant={employee.roleName === 'ADMIN' ? 'default' : 'secondary'}
-                                className="text-xs shrink-0"
-                              >
-                                {employee.roleName}
-                              </Badge>
-                            )}
-                          </div>
-                          <CardDescription className="text-xs">
-                            {employee.email}
-                          </CardDescription>
+                  return (
+                    <TableRow key={employee.id}>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{cleanName}</span>
+                          <span className="text-xs text-muted-foreground">{employee.email}</span>
                         </div>
-                        <Badge variant="outline" className="shrink-0">
+                      </TableCell>
+                      <TableCell>
+                        {employee.roleName && (
+                          <Badge
+                            variant={employee.roleName === 'ADMIN' ? 'default' : 'secondary'}
+                            className="text-xs"
+                          >
+                            {employee.roleName}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
                           {employee.storeAccess.length} {employee.storeAccess.length === 1 ? 'store' : 'stores'}
                         </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <div className="space-y-3">
-                        <div>
-                          <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Store Access
-                          </p>
-                          {stores.length === 0 ? (
-                            <p className="text-xs text-muted-foreground py-2">
-                              No stores available. Create a store first.
-                            </p>
-                          ) : (
-                            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                              {stores.map((store) => {
-                                const isSelected = employeeStores.has(store.id)
-                                return (
-                                  <div
-                                    key={store.id}
-                                    className={`flex items-start gap-2.5 rounded-lg border p-2.5 transition-colors ${isSelected
-                                      ? 'border-primary bg-primary/5'
-                                      : 'border-border/60 hover:bg-muted/50'
-                                      }`}
-                                  >
-                                    <Checkbox
-                                      id={`${employee.id}-${store.id}`}
-                                      checked={isSelected}
-                                      onCheckedChange={() =>
-                                        handleStoreToggle(employee.id, store.id)
-                                      }
-                                      className="mt-0.5"
-                                    />
-                                    <label
-                                      htmlFor={`${employee.id}-${store.id}`}
-                                      className="flex-1 cursor-pointer text-xs leading-tight peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                    >
-                                      <div className="font-medium text-sm mb-0.5">{store.name}</div>
-                                      {store.address && (
-                                        <div className="text-xs text-muted-foreground line-clamp-1">
-                                          {store.address}
-                                        </div>
-                                      )}
-                                    </label>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center justify-end gap-2 border-t border-border/60 pt-3">
-                          {hasChanges && (
-                            <Badge variant="outline" className="mr-auto text-xs">
-                              Unsaved changes
-                            </Badge>
-                          )}
-                          <Button
-                            onClick={() => handleSave(employee.id)}
-                            disabled={!hasChanges || isSaving}
-                            size="sm"
-                            className="h-8 text-xs"
-                          >
-                            {isSaving ? (
-                              <>
-                                <Loader2 className="mr-1.5 size-3 animate-spin" />
-                                Saving...
-                              </>
-                            ) : (
-                              <>
-                                <Save className="mr-1.5 size-3" />
-                                Save Changes
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openManageDialog(employee)}
+                        >
+                          <StoreIcon className="mr-2 h-4 w-4" />
+                          Manage Access
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Manage Store Access</DialogTitle>
+            <DialogDescription>
+              Select the stores that <span className="font-medium text-foreground">{editingEmployee?.fullName || editingEmployee?.email}</span> can access.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            {stores.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No stores available. Create a store first.
+              </p>
+            ) : (
+              <div className="max-h-[300px] overflow-y-auto pr-2 space-y-2">
+                {editingEmployee && stores.map((store) => {
+                  const isSelected = selectedStores[editingEmployee.id]?.has(store.id)
+                  return (
+                    <div
+                      key={store.id}
+                      className={`flex items-start gap-3 rounded-lg border p-3 transition-colors ${isSelected
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border/60 hover:bg-muted/50'
+                        }`}
+                    >
+                      <Checkbox
+                        id={`dialog-${editingEmployee.id}-${store.id}`}
+                        checked={isSelected}
+                        onCheckedChange={() =>
+                          handleStoreToggle(editingEmployee.id, store.id)
+                        }
+                        className="mt-0.5"
+                      />
+                      <label
+                        htmlFor={`dialog-${editingEmployee.id}-${store.id}`}
+                        className="flex-1 cursor-pointer text-sm leading-tight"
+                      >
+                        <div className="font-medium">{store.name}</div>
+                        {store.address && (
+                          <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                            {store.address}
+                          </div>
+                        )}
+                      </label>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={!editingEmployee || (saving[editingEmployee.id] ?? false)}
+            >
+              {(editingEmployee && saving[editingEmployee.id]) ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  Save Changes
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
-
