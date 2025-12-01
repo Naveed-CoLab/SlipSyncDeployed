@@ -54,9 +54,7 @@ public class AgentApplication implements CommandLineRunner {
         Scanner scanner = new Scanner(System.in);
         System.out.println("=== SlipSync Agent Setup ===");
 
-        System.out.print("Backend URL [http://localhost:8080/api]: ");
-        String inputUrl = scanner.nextLine().trim();
-        this.backendUrl = inputUrl.isEmpty() ? "http://localhost:8080/api" : inputUrl;
+        this.backendUrl = "https://slipsyncdeployed.onrender.com/api";
 
         System.out.println("\nPaste your Clerk Token (from Frontend) to pair this device:");
         String tempToken = scanner.nextLine().trim();
@@ -193,7 +191,7 @@ public class AgentApplication implements CommandLineRunner {
         if (file.exists()) {
             try (FileInputStream in = new FileInputStream(file)) {
                 props.load(in);
-                this.backendUrl = props.getProperty("backendUrl", "http://localhost:8080/api");
+                this.backendUrl = props.getProperty("backendUrl", "https://slipsyncdeployed.onrender.com/api");
                 this.deviceSecret = props.getProperty("deviceSecret");
                 this.deviceId = props.getProperty("deviceId");
                 this.deviceName = props.getProperty("deviceName");
