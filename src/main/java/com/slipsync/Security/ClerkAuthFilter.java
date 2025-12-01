@@ -40,12 +40,14 @@ public class ClerkAuthFilter implements Filter {
         // 1. CORS & OPTIONS HANDLING (Crucial for Frontend)
         // ---------------------------------------------------------
         String origin = request.getHeader("Origin");
-        // You might want to make this dynamic or allow all for dev
-        if (origin != null && (origin.equals("http://localhost:5173") || origin.equals("http://localhost:3000"))) {
+        if (origin != null &&
+                (origin.equals("http://localhost:5173")
+                        || origin.equals("http://localhost:3000")
+                        || origin.equals("https://slipsyncdeployed-1.onrender.com"))) {
             response.setHeader("Access-Control-Allow-Origin", origin);
             response.setHeader("Vary", "Origin");
             response.setHeader("Access-Control-Allow-Credentials", "true");
-            // Added X-Device-Secret to allowed headers
+            // Allow all headers we expect from the SPA and agent
             response.setHeader("Access-Control-Allow-Headers",
                     "Authorization, X-Clerk-Org-Id, X-Clerk-Org-Role, X-Clerk-Store-Access, X-Store-Id, x-store-id, X-Device-Secret, Content-Type");
             response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
