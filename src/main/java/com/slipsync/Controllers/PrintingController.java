@@ -113,20 +113,17 @@ public class PrintingController {
 
         List<PrintDevice> devices = deviceRepository.findByMerchantId(user.getMerchant().getId());
 
-        boolean isOnline = devices.stream().anyMatch(d -> d.getLastSeen() != null &&
-                ChronoUnit.SECONDS.between(d.getLastSeen(), LocalDateTime.now()) < 60);
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("status", isOnline ? "ONLINE" : "OFFLINE");
-        response.put("activeDevices", devices.size());
-
+        Map<String, Object> response = new HashMap<>();       
         // Build a list of device info objects (name + lastSeen) to return to the client
         java.util.List<Map<String, Object>> deviceList = new java.util.ArrayList<>();
         for (PrintDevice d : devices) {
-            Map<String, Object> dev = new HashMap<>();
-            dev.put("name", d.getName());
-            dev.put("deviceIdentifier", d.getApiSecret());
-            deviceList.add(dev);
+            if (d.getLastSeen() != null && ChronoUnit.SECONDS.between(d.getLastSeen(), LocalDateTime.now()) < 10) {
+                Map<String, Object> dev = new HashMap<>();
+                dev.put("name", d.getName());
+                dev.put("deviceIdentifier", d.getApiSecret());
+                dev.put("lastSeen", d.getLastSeen());
+                deviceList.add(dev);
+            }
         }
         response.put("devices", deviceList);
 
