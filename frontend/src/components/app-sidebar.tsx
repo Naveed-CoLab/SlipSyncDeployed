@@ -88,11 +88,6 @@ const data = {
       url: "#",
       icon: IconHelp,
     },
-    {
-      title: "Reports",
-      url: "#",
-      icon: IconReport,
-    },
   ],
 }
 
@@ -119,15 +114,15 @@ export function AppSidebar({
 
   const currentUser = React.useMemo(() => {
     const base = {
-            name:
+      name:
         user?.fullName ||
         user?.username ||
         user?.primaryEmailAddress?.emailAddress ||
-              "User",
+        "User",
       email: user?.primaryEmailAddress?.emailAddress || "",
       avatar: user?.imageUrl || "",
-            orgName: organization?.name || "",
-          }
+      orgName: organization?.name || "",
+    }
 
     return base
   }, [user, organization?.name])
@@ -152,10 +147,10 @@ export function AppSidebar({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="flex items-center gap-2">
-                <IconInnerShadowTop className="!size-5" />
+                        <IconInnerShadowTop className="!size-5" />
                         <div className="flex flex-col">
-                <span className="text-base font-semibold">{orgName}</span>
-                         
+                          <span className="text-base font-semibold">{orgName}</span>
+
                         </div>
                         {orgVerified && (
                           <Badge variant="secondary" className="ml-auto h-5 gap-1 px-2 text-xs">

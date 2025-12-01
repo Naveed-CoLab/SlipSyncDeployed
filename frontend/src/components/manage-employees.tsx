@@ -196,9 +196,43 @@ export function ManageEmployees({ apiBaseUrl, token, userRole, storeAccess }: Ma
             <CardDescription className="text-sm">Loading employee data...</CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="space-y-3">
+            <div className="space-y-4">
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-32 w-full rounded-lg" />
+                <Card key={i} className="border border-border/60">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Skeleton className="h-5 w-32" />
+                          <Skeleton className="h-5 w-16 rounded-full" />
+                        </div>
+                        <Skeleton className="h-3 w-48" />
+                      </div>
+                      <Skeleton className="h-5 w-16 rounded-full" />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="space-y-3">
+                      <div>
+                        <Skeleton className="h-3 w-24 mb-2" />
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {[1, 2, 3].map((j) => (
+                            <div key={j} className="flex items-start gap-2.5 rounded-lg border border-border/60 p-2.5">
+                              <Skeleton className="h-4 w-4 mt-0.5" />
+                              <div className="flex-1">
+                                <Skeleton className="h-4 w-24 mb-1" />
+                                <Skeleton className="h-3 w-32" />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-end border-t border-border/60 pt-3">
+                        <Skeleton className="h-8 w-24" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               ))}
             </div>
           </CardContent>
@@ -230,7 +264,7 @@ export function ManageEmployees({ apiBaseUrl, token, userRole, storeAccess }: Ma
                   JSON.stringify(Array.from(employeeStores).sort()) !==
                   JSON.stringify(employee.storeAccess.sort())
                 const isSaving = saving[employee.id] || false
-                
+
                 // Clean up fullName - remove "Optional" text and brackets
                 const cleanName = (employee.fullName || employee.email || 'Unknown')
                   .replace(/Optional\[/gi, '')
@@ -248,7 +282,7 @@ export function ManageEmployees({ apiBaseUrl, token, userRole, storeAccess }: Ma
                               {cleanName}
                             </CardTitle>
                             {employee.roleName && (
-                              <Badge 
+                              <Badge
                                 variant={employee.roleName === 'ADMIN' ? 'default' : 'secondary'}
                                 className="text-xs shrink-0"
                               >
@@ -282,11 +316,10 @@ export function ManageEmployees({ apiBaseUrl, token, userRole, storeAccess }: Ma
                                 return (
                                   <div
                                     key={store.id}
-                                    className={`flex items-start gap-2.5 rounded-lg border p-2.5 transition-colors ${
-                                      isSelected 
-                                        ? 'border-primary bg-primary/5' 
-                                        : 'border-border/60 hover:bg-muted/50'
-                                    }`}
+                                    className={`flex items-start gap-2.5 rounded-lg border p-2.5 transition-colors ${isSelected
+                                      ? 'border-primary bg-primary/5'
+                                      : 'border-border/60 hover:bg-muted/50'
+                                      }`}
                                   >
                                     <Checkbox
                                       id={`${employee.id}-${store.id}`}

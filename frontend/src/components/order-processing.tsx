@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  BadgeCheck,
-  Download,
   Percent,
   Plus,
   ShoppingCart,
@@ -12,7 +10,7 @@ import {
 import { toast } from 'sonner'
 
 import type { ProductInventoryEntry } from '@/types/dashboard'
-import { Printer, AlertCircle } from 'lucide-react'
+import { Printer, AlertCircle, BadgeCheck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -38,14 +36,7 @@ type CartItem = {
   available: number
 }
 
-type SalesSummary = {
-  range: 'daily' | 'monthly'
-  grossSales: number
-  discountsTotal: number
-  taxesTotal: number
-  netSales: number
-  orderCount: number
-}
+
 
 interface OrderProcessingProps {
   apiBaseUrl: string
@@ -58,6 +49,7 @@ interface OrderProcessingProps {
   userRole?: string | null
   storeAccess?: string
   onRefresh(): void
+  refreshReports(): void
 }
 
 const numberFormatter = new Intl.NumberFormat('en-US', {
@@ -88,6 +80,7 @@ export function OrderProcessing({
   userRole,
   storeAccess,
   onRefresh,
+  refreshReports,
 }: OrderProcessingProps) {
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null)
   const [devices, setDevices] = useState<Array<{ deviceIdentifier: string; name: string }>>([])
@@ -107,12 +100,6 @@ export function OrderProcessing({
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false)
   const [newCustomerForm, setNewCustomerForm] = useState({ name: '', email: '', phone: '' })
   const [processingOrder, setProcessingOrder] = useState(false)
-  const [reports, setReports] = useState<{ daily: SalesSummary | null; monthly: SalesSummary | null }>({
-    daily: null,
-    monthly: null,
-  })
-  const [fetchingReports, setFetchingReports] = useState(false)
-  const [reportVersion, setReportVersion] = useState(0)
 
   const productOptions = useMemo(() => products ?? [], [products])
 
@@ -204,43 +191,6 @@ export function OrderProcessing({
     }
     fetchCustomers()
   }, [token, storeId, userRole, storeAccess])
-
-  useEffect(() => {
-    if (!token || !storeId) {
-      return
-    }
-    let cancelled = false
-    async function fetchReports() {
-      try {
-        setFetchingReports(true)
-        const headers = buildHeaders()
-        const [dailyRes, monthlyRes] = await Promise.all([
-          fetch(`${apiBaseUrl}/api/reports/sales/summary?range=daily`, { headers }),
-          fetch(`${apiBaseUrl}/api/reports/sales/summary?range=monthly`, { headers }),
-        ])
-        if (!dailyRes.ok || !monthlyRes.ok) {
-          throw new Error('Failed to load reports')
-        }
-        const dailyJson = (await dailyRes.json()) as SalesSummary
-        const monthlyJson = (await monthlyRes.json()) as SalesSummary
-        if (!cancelled) {
-          setReports({ daily: dailyJson, monthly: monthlyJson })
-        }
-      } catch (error) {
-        if (!cancelled) {
-          toast.error('Unable to load reporting data')
-        }
-      } finally {
-        if (!cancelled) {
-          setFetchingReports(false)
-        }
-      }
-    }
-    void fetchReports()
-    return () => {
-      cancelled = true
-    }
-  }, [apiBaseUrl, token, storeId, reportVersion, userRole, storeAccess])
 
   const handleAddToCart = () => {
     if (!selectedVariantId) {
@@ -499,33 +449,6 @@ export function OrderProcessing({
     }
   }
 
-  const refreshReports = () => {
-    if (!token || !storeId) return
-    setReports({ daily: null, monthly: null })
-    setReportVersion((prev) => prev + 1)
-  }
-
-  const handleExportCsv = async (range: 'daily' | 'monthly') => {
-    if (!token || !storeId) return
-    try {
-      const res = await fetch(`${apiBaseUrl}/api/reports/sales/export?range=${range}`, {
-        headers: buildHeaders(),
-      })
-      if (!res.ok) throw new Error('Failed to export CSV')
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `sales-${range}-${new Date().toISOString().slice(0, 10)}.csv`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
-    } catch (error) {
-      toast.error('Unable to download CSV')
-    }
-  }
-
 
   return (
     <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
@@ -752,70 +675,6 @@ export function OrderProcessing({
               Clear cart
             </Button>
           </CardFooter>
-        </Card>
-      </div>
-
-      <div className="space-y-6">
-        <Card className="rounded-3xl border border-border/70 bg-card/80 shadow-sm">
-          <CardHeader className="flex flex-col gap-2">
-            <CardTitle className="flex items-center gap-2">
-              <BadgeCheck className="size-4" />
-              Sales snapshots
-            </CardTitle>
-            <CardDescription>Daily and monthly performance for this store.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {(['daily', 'monthly'] as const).map((range) => {
-              const summary = reports[range]
-              return (
-                <div
-                  key={range}
-                  className="rounded-2xl border border-border/60 bg-background/50 p-4 shadow-sm"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">{range}</p>
-                      <p className="text-2xl font-semibold">
-                        {summary ? formatMoney(Number(summary.netSales ?? 0), currency) : '—'}
-                      </p>
-                    </div>
-                    <Badge variant="secondary">{summary?.orderCount ?? 0} orders</Badge>
-                  </div>
-                  <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Gross</p>
-                      <p className="font-medium">
-                        {summary ? formatMoney(Number(summary.grossSales ?? 0), currency) : '—'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Discounts</p>
-                      <p className="font-medium">
-                        {summary ? formatMoney(Number(summary.discountsTotal ?? 0), currency) : '—'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Taxes</p>
-                      <p className="font-medium">
-                        {summary ? formatMoney(Number(summary.taxesTotal ?? 0), currency) : '—'}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleExportCsv(range)}
-                      disabled={fetchingReports}
-                    >
-                      <Download className="mr-2 size-4" />
-                      Export CSV
-                    </Button>
-                  </div>
-                </div>
-              )
-            })}
-          </CardContent>
         </Card>
       </div>
 

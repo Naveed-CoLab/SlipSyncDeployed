@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { EmptyState } from '@/components/empty-state'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
+import { TableSkeleton } from '@/components/ui/table-skeleton'
 
 interface Store {
   id: string
@@ -117,9 +118,15 @@ export function ManageStores({
       <div className="flex-1 px-4 pb-12 pt-4 lg:px-8 lg:pt-6">
         <Card className="rounded-3xl border border-border/70 bg-card/80 shadow-sm backdrop-blur">
           <CardHeader>
-            <CardTitle>Manage Stores</CardTitle>
-            <CardDescription>Loading...</CardDescription>
+            <CardTitle className="text-xl font-semibold flex items-center gap-2">
+              <Store className="h-5 w-5" />
+              Manage Stores
+            </CardTitle>
+            <CardDescription>View and delete stores. Only administrators can access this page.</CardDescription>
           </CardHeader>
+          <CardContent>
+            <TableSkeleton columnCount={5} rowCount={5} />
+          </CardContent>
         </Card>
       </div>
     )

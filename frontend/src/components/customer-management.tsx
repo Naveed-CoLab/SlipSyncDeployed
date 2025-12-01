@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dialog'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { EmptyState } from '@/components/empty-state'
+import { TableSkeleton } from '@/components/ui/table-skeleton'
 
 interface Customer {
   id: string
@@ -275,9 +276,28 @@ export function CustomerManagement({
       <div className="flex-1 px-4 pb-12 pt-4 lg:px-8 lg:pt-6">
         <Card className="rounded-3xl border border-border/70 bg-card/80 shadow-sm backdrop-blur">
           <CardHeader>
-            <CardTitle>Customer Management</CardTitle>
-            <CardDescription>Loading...</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-xl font-semibold flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Customer Management
+                </CardTitle>
+                <CardDescription>
+                  {isAdmin()
+                    ? 'View and manage all customers across all stores'
+                    : 'View and manage customers for your assigned stores'}
+                </CardDescription>
+              </div>
+              {!isAdmin() && (
+                <Badge variant="secondary" className="text-xs">
+                  Limited Access
+                </Badge>
+              )}
+            </div>
           </CardHeader>
+          <CardContent>
+            <TableSkeleton columnCount={5} rowCount={5} />
+          </CardContent>
         </Card>
       </div>
     )

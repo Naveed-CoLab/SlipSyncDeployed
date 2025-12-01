@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useOrganization, useOrganizationList, useSession } from '@clerk/clerk-react'
 import { Toaster, toast } from 'sonner'
+import { Download, BadgeCheck } from 'lucide-react'
 
 import { ChartAreaInteractive } from '@/components/chart-area-interactive'
 import { EmptyState } from '@/components/empty-state'
@@ -15,6 +16,7 @@ import { SiteHeader } from '@/components/site-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Layout } from '@/Layout'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { StoreSummary } from '@/types/store'
@@ -24,6 +26,7 @@ import type {
   OrderSummary,
   ProductInventoryEntry,
 } from '@/types/dashboard'
+import type { SalesSummary } from '@/types/reports'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'
 
@@ -75,6 +78,12 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [dataVersion, setDataVersion] = useState(0)
   const [dbUserRole, setDbUserRole] = useState<string | null>(null) // Role from database
+  const [reports, setReports] = useState<{ daily: SalesSummary | null; monthly: SalesSummary | null }>({
+    daily: null,
+    monthly: null,
+  })
+  const [fetchingReports, setFetchingReports] = useState(false)
+  const [reportVersion, setReportVersion] = useState(0)
   const activeStore = useMemo(
     () => stores.find((store) => store.id === activeStoreId) ?? null,
     [stores, activeStoreId],
@@ -132,6 +141,26 @@ function App() {
     }
     return ''
   }, [organization])
+
+  // Helper to build headers with role and store_access
+  const buildHeaders = useCallback((includeContentType = false): Record<string, string> => {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${apiToken || ''}`,
+    }
+    if (activeStoreId) {
+      headers['X-Store-Id'] = activeStoreId
+    }
+    if (includeContentType) {
+      headers['Content-Type'] = 'application/json'
+    }
+    if (userRole) {
+      headers['X-Clerk-Org-Role'] = userRole
+    }
+    if (storeAccess) {
+      headers['X-Clerk-Store-Access'] = storeAccess
+    }
+    return headers
+  }, [apiToken, activeStoreId, userRole, storeAccess])
 
   useEffect(() => {
     // Wait until both the Clerk session and organization list are loaded.
@@ -370,6 +399,44 @@ function App() {
     void load()
   }, [apiToken, activeStoreId, dataVersion, userRole, storeAccess])
 
+  // Fetch reports data
+  useEffect(() => {
+    if (!apiToken || !activeStoreId) {
+      return
+    }
+    let cancelled = false
+    async function fetchReports() {
+      try {
+        setFetchingReports(true)
+        const headers = buildHeaders()
+        const [dailyRes, monthlyRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/reports/sales/summary?range=daily`, { headers }),
+          fetch(`${API_BASE_URL}/api/reports/sales/summary?range=monthly`, { headers }),
+        ])
+        if (!dailyRes.ok || !monthlyRes.ok) {
+          throw new Error('Failed to load reports')
+        }
+        const dailyJson = (await dailyRes.json()) as SalesSummary
+        const monthlyJson = (await monthlyRes.json()) as SalesSummary
+        if (!cancelled) {
+          setReports({ daily: dailyJson, monthly: monthlyJson })
+        }
+      } catch (error) {
+        if (!cancelled) {
+          toast.error('Unable to load reporting data')
+        }
+      } finally {
+        if (!cancelled) {
+          setFetchingReports(false)
+        }
+      }
+    }
+    void fetchReports()
+    return () => {
+      cancelled = true
+    }
+  }, [apiToken, activeStoreId, reportVersion, buildHeaders])
+
   const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
 
   const todaysOrders = useMemo(
@@ -412,6 +479,33 @@ function App() {
     setDataVersion((prev) => prev + 1)
   }, [])
 
+  const refreshReports = useCallback(() => {
+    if (!apiToken || !activeStoreId) return
+    setReports({ daily: null, monthly: null })
+    setReportVersion((prev) => prev + 1)
+  }, [apiToken, activeStoreId])
+
+  const handleExportCsv = useCallback(async (range: 'daily' | 'monthly') => {
+    if (!apiToken || !activeStoreId) return
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/reports/sales/export?range=${range}`, {
+        headers: buildHeaders(),
+      })
+      if (!res.ok) throw new Error('Failed to export CSV')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `sales-${range}-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      toast.error('Unable to download CSV')
+    }
+  }, [apiToken, activeStoreId, buildHeaders])
+
   const layoutSidebarProps = {
     stores,
     activeStoreId,
@@ -437,6 +531,69 @@ function App() {
               currencyCode={storeCurrency}
             />
           )}
+
+          {/* Sales Snapshots Card */}
+          <Card className="rounded-3xl border border-border/70 bg-card/80 shadow-sm">
+            <CardHeader className="flex flex-col gap-2">
+              <CardTitle className="flex items-center gap-2">
+                <BadgeCheck className="size-4" />
+                Sales snapshots
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">Daily and monthly performance for this store.</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {(['daily', 'monthly'] as const).map((range) => {
+                const summary = reports[range]
+                return (
+                  <div
+                    key={range}
+                    className="rounded-2xl border border-border/60 bg-background/50 p-4 shadow-sm"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">{range}</p>
+                        <p className="text-2xl font-semibold">
+                          {summary ? formatCurrencyValue(Number(summary.netSales ?? 0), storeCurrency) : '—'}
+                        </p>
+                      </div>
+                      <Badge variant="secondary">{summary?.orderCount ?? 0} orders</Badge>
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Gross</p>
+                        <p className="font-medium">
+                          {summary ? formatCurrencyValue(Number(summary.grossSales ?? 0), storeCurrency) : '—'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Discounts</p>
+                        <p className="font-medium">
+                          {summary ? formatCurrencyValue(Number(summary.discountsTotal ?? 0), storeCurrency) : '—'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Taxes</p>
+                        <p className="font-medium">
+                          {summary ? formatCurrencyValue(Number(summary.taxesTotal ?? 0), storeCurrency) : '—'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleExportCsv(range)}
+                        disabled={fetchingReports}
+                      >
+                        <Download className="mr-2 size-4" />
+                        Export CSV
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </CardContent>
+          </Card>
 
           <Card className="rounded-3xl border border-border/70 bg-card/80 shadow-sm backdrop-blur">
             <CardHeader className="pb-4">
@@ -672,6 +829,7 @@ function App() {
           userRole={userRole}
           storeAccess={storeAccess}
           onRefresh={refreshStoreData}
+          refreshReports={refreshReports}
         />
       </div>
     )

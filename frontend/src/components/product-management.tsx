@@ -20,6 +20,7 @@ import {
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { EmptyState } from '@/components/empty-state'
+import { TableSkeleton } from '@/components/ui/table-skeleton'
 
 interface Product {
   id: string
@@ -584,19 +585,35 @@ export function ProductManagement({
     return product?.name || 'Unknown Product'
   }
 
-  const getVariantInfo = (variantId: string) => {
-    const variant = variants.find((v) => v.id === variantId)
-    return variant
-  }
-
   if (loading && !authError) {
     return (
       <div className="flex-1 px-4 pb-12 pt-4 lg:px-8 lg:pt-6">
         <Card className="rounded-3xl border border-border/70 bg-card/80 shadow-sm backdrop-blur">
           <CardHeader>
-            <CardTitle>Product Management</CardTitle>
-            <CardDescription>Loading...</CardDescription>
+            <CardTitle className="text-xl font-semibold">Product Management</CardTitle>
+            <CardDescription>Manage products, variants, and inventory</CardDescription>
           </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="products">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="products">
+                  <Package className="mr-2 h-4 w-4" />
+                  Products
+                </TabsTrigger>
+                <TabsTrigger value="variants">
+                  <Box className="mr-2 h-4 w-4" />
+                  Variants
+                </TabsTrigger>
+                <TabsTrigger value="inventory">
+                  <Warehouse className="mr-2 h-4 w-4" />
+                  Inventory
+                </TabsTrigger>
+              </TabsList>
+              <div className="mt-4">
+                <TableSkeleton columnCount={5} rowCount={5} />
+              </div>
+            </Tabs>
+          </CardContent>
         </Card>
       </div>
     )
@@ -604,7 +621,7 @@ export function ProductManagement({
 
   if (authError || !token) {
     return (
-      <div className="flex-1 px-4 pb-12 pt-4 lg:px-8 lg:pt-6">
+      <div className="flex-1 px-2 pb-12 pt-4 lg:px-4 lg:pt-6">
         <Card className="rounded-3xl border border-border/70 bg-card/80 shadow-sm backdrop-blur">
           <CardHeader>
             <CardTitle>Product Management</CardTitle>

@@ -16,7 +16,6 @@ const linkMap: Record<string, string> = {
   "Manage Employees": "/manage-employees",
   "Manage Stores": "/manage-stores",
   "Support": "/support",
-  "Reports": "/reports",
 }
 
 export function NavSecondary({
