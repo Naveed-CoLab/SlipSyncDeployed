@@ -112,6 +112,9 @@ export function ProductManagement({
     active: true,
     categoryId: '',
   })
+  const [productFormErrors, setProductFormErrors] = useState({
+    name: '',
+  })
 
   // Variant dialog state
   const [variantDialogOpen, setVariantDialogOpen] = useState(false)
@@ -286,7 +289,24 @@ export function ProductManagement({
     loadData()
   }, [storeId, token, userRole, storeAccess])
 
+  const validateProductForm = () => {
+    const errors = {
+      name: '',
+    }
+    let isValid = true
+
+    if (!productForm.name.trim()) {
+      errors.name = 'Name is required'
+      isValid = false
+    }
+
+    setProductFormErrors(errors)
+    return isValid
+  }
+
   const handleCreateProduct = async () => {
+    if (!validateProductForm()) return
+
     try {
       const response = await fetch(`${apiBaseUrl}/api/products`, {
         method: 'POST',
@@ -308,6 +328,7 @@ export function ProductManagement({
       toast.success('Product created successfully')
       setProductDialogOpen(false)
       setProductForm({ name: '', sku: '', description: '', active: true, categoryId: '' })
+      setProductFormErrors({ name: '' })
       await fetchProducts()
     } catch (error: any) {
       toast.error(error.message || 'Failed to create product')
@@ -316,6 +337,8 @@ export function ProductManagement({
 
   const handleUpdateProduct = async () => {
     if (!editingProduct) return
+    if (!validateProductForm()) return
+
     try {
       const response = await fetch(`${apiBaseUrl}/api/products/${editingProduct.id}`, {
         method: 'PUT',
@@ -336,6 +359,7 @@ export function ProductManagement({
       setProductDialogOpen(false)
       setEditingProduct(null)
       setProductForm({ name: '', sku: '', description: '', active: true, categoryId: '' })
+      setProductFormErrors({ name: '' })
       await fetchProducts()
     } catch (error: any) {
       toast.error(error.message || 'Failed to update product')
@@ -533,8 +557,10 @@ export function ProductManagement({
       })
     } else {
       setEditingProduct(null)
+      setEditingProduct(null)
       setProductForm({ name: '', sku: '', description: '', active: true, categoryId: '' })
     }
+    setProductFormErrors({ name: '' })
     setProductDialogOpen(true)
   }
 
@@ -834,9 +860,18 @@ export function ProductManagement({
               <Input
                 id="name"
                 value={productForm.name}
-                onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                onChange={(e) => {
+                  setProductForm({ ...productForm, name: e.target.value })
+                  if (productFormErrors.name) {
+                    setProductFormErrors({ ...productFormErrors, name: '' })
+                  }
+                }}
                 placeholder="Product name"
+                className={productFormErrors.name ? 'border-destructive' : ''}
               />
+              {productFormErrors.name && (
+                <p className="text-sm text-destructive">{productFormErrors.name}</p>
+              )}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="sku">SKU</Label>

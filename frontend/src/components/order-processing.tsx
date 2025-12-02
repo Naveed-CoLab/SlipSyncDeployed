@@ -99,6 +99,7 @@ export function OrderProcessing({
   const [customers, setCustomers] = useState<Array<{ id: string; name: string; email: string | null; phone: string | null }>>([])
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false)
   const [newCustomerForm, setNewCustomerForm] = useState({ name: '', email: '', phone: '' })
+  const [customerFormErrors, setCustomerFormErrors] = useState<Record<string, string>>({})
   const [processingOrder, setProcessingOrder] = useState(false)
 
   const productOptions = useMemo(() => products ?? [], [products])
@@ -265,11 +266,24 @@ export function OrderProcessing({
   }
 
   const handleCreateCustomer = async () => {
+    const errors: Record<string, string> = {}
     if (!newCustomerForm.name.trim()) {
-      toast.error('Customer name is required')
+      errors.name = 'Customer name is required'
+    }
+    if (newCustomerForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newCustomerForm.email)) {
+      errors.email = 'Invalid email address'
+    }
+    if (newCustomerForm.phone && !/^\+?[\d\s-]+$/.test(newCustomerForm.phone)) {
+      errors.phone = 'Invalid phone number'
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setCustomerFormErrors(errors)
       return
     }
+
     setCustomerDialogOpen(false)
+    setCustomerFormErrors({})
     // Customer will be created during order processing
     toast.success('Customer will be added to order')
   }
@@ -564,6 +578,7 @@ export function OrderProcessing({
                     setSelectedCustomerId(value)
                   }
                   setNewCustomerForm({ name: '', email: '', phone: '' })
+                  setCustomerFormErrors({})
                 }}>
                   <SelectTrigger className="flex-1">
                     <SelectValue placeholder="Select existing customer or create new" />
@@ -583,6 +598,7 @@ export function OrderProcessing({
                   onClick={() => {
                     setSelectedCustomerId(null)
                     setCustomerDialogOpen(true)
+                    setCustomerFormErrors({})
                   }}
                 >
                   <UserPlus className="mr-2 h-4 w-4" />
@@ -693,9 +709,14 @@ export function OrderProcessing({
               <Input
                 id="customer-name"
                 value={newCustomerForm.name}
-                onChange={(e) => setNewCustomerForm({ ...newCustomerForm, name: e.target.value })}
+                onChange={(e) => {
+                  setNewCustomerForm({ ...newCustomerForm, name: e.target.value })
+                  if (customerFormErrors.name) setCustomerFormErrors({ ...customerFormErrors, name: '' })
+                }}
                 placeholder="Customer name"
+                className={customerFormErrors.name ? 'border-destructive' : ''}
               />
+              {customerFormErrors.name && <p className="text-sm text-destructive">{customerFormErrors.name}</p>}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="customer-email">Email</Label>
@@ -703,18 +724,28 @@ export function OrderProcessing({
                 id="customer-email"
                 type="email"
                 value={newCustomerForm.email}
-                onChange={(e) => setNewCustomerForm({ ...newCustomerForm, email: e.target.value })}
+                onChange={(e) => {
+                  setNewCustomerForm({ ...newCustomerForm, email: e.target.value })
+                  if (customerFormErrors.email) setCustomerFormErrors({ ...customerFormErrors, email: '' })
+                }}
                 placeholder="customer@example.com"
+                className={customerFormErrors.email ? 'border-destructive' : ''}
               />
+              {customerFormErrors.email && <p className="text-sm text-destructive">{customerFormErrors.email}</p>}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="customer-phone">Phone</Label>
               <Input
                 id="customer-phone"
                 value={newCustomerForm.phone}
-                onChange={(e) => setNewCustomerForm({ ...newCustomerForm, phone: e.target.value })}
+                onChange={(e) => {
+                  setNewCustomerForm({ ...newCustomerForm, phone: e.target.value })
+                  if (customerFormErrors.phone) setCustomerFormErrors({ ...customerFormErrors, phone: '' })
+                }}
                 placeholder="+1234567890"
+                className={customerFormErrors.phone ? 'border-destructive' : ''}
               />
+              {customerFormErrors.phone && <p className="text-sm text-destructive">{customerFormErrors.phone}</p>}
             </div>
           </div>
           <DialogFooter>
