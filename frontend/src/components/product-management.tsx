@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, Package, Box, Warehouse, RefreshCw } from 'lucide-react'
+import { Plus, Pencil, Package, Box, Warehouse, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
