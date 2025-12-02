@@ -17,7 +17,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { EmptyState } from '@/components/empty-state'
 import { TableSkeleton } from '@/components/ui/table-skeleton'
@@ -137,12 +136,6 @@ export function ProductManagement({
     reserved: '',
     reorderPoint: '',
   })
-
-  // Delete confirmation dialog state
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [deleteType, setDeleteType] = useState<'product' | 'variant' | null>(null)
-  const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string } | null>(null)
-  const [deleting, setDeleting] = useState(false)
 
   const buildHeaders = () => {
     const headers: Record<string, string> = {
@@ -366,45 +359,6 @@ export function ProductManagement({
     }
   }
 
-  const handleDeleteProduct = (id: string, name: string) => {
-    setDeleteType('product')
-    setItemToDelete({ id, name })
-    setDeleteDialogOpen(true)
-  }
-
-  const confirmDeleteProduct = async () => {
-    if (!itemToDelete || deleteType !== 'product') return
-    setDeleting(true)
-    try {
-      const response = await fetch(`${apiBaseUrl}/api/products/${itemToDelete.id}`, {
-        method: 'DELETE',
-        headers: buildHeaders(),
-      })
-      if (!response.ok) {
-        const error = await response.text()
-        // Check if it's a constraint violation error
-        if (response.status === 400 && error.includes('order')) {
-          toast.error(error, { duration: 5000 })
-          setDeleteDialogOpen(false)
-        } else {
-          throw new Error(error)
-        }
-        return
-      }
-      toast.success('Product deleted successfully')
-      setDeleteDialogOpen(false)
-      setItemToDelete(null)
-      setDeleteType(null)
-      await fetchProducts()
-      await fetchVariants()
-      await fetchInventory()
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to delete product')
-    } finally {
-      setDeleting(false)
-    }
-  }
-
   const handleCreateVariant = async () => {
     if (!variantForm.productId) {
       toast.error('Please select a product')
@@ -478,44 +432,6 @@ export function ProductManagement({
       await fetchVariants()
     } catch (error: any) {
       toast.error(error.message || 'Failed to update variant')
-    }
-  }
-
-  const handleDeleteVariant = (id: string, name: string) => {
-    setDeleteType('variant')
-    setItemToDelete({ id, name })
-    setDeleteDialogOpen(true)
-  }
-
-  const confirmDeleteVariant = async () => {
-    if (!itemToDelete || deleteType !== 'variant') return
-    setDeleting(true)
-    try {
-      const response = await fetch(`${apiBaseUrl}/api/variants/${itemToDelete.id}`, {
-        method: 'DELETE',
-        headers: buildHeaders(),
-      })
-      if (!response.ok) {
-        const error = await response.text()
-        // Check if it's a constraint violation error
-        if (response.status === 400 && error.includes('order')) {
-          toast.error(error, { duration: 5000 })
-          setDeleteDialogOpen(false)
-        } else {
-          throw new Error(error)
-        }
-        return
-      }
-      toast.success('Variant deleted successfully')
-      setDeleteDialogOpen(false)
-      setItemToDelete(null)
-      setDeleteType(null)
-      await fetchVariants()
-      await fetchInventory()
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to delete variant')
-    } finally {
-      setDeleting(false)
     }
   }
 
@@ -733,13 +649,6 @@ export function ProductManagement({
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteProduct(product.id, product.name)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -786,13 +695,6 @@ export function ProductManagement({
                               onClick={() => openVariantDialog(variant)}
                             >
                               <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteVariant(variant.id, variant.sku || 'Variant')}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
                           </div>
                         </TableCell>
@@ -1085,27 +987,6 @@ export function ProductManagement({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <DeleteConfirmationDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        onConfirm={async () => {
-          if (deleteType === 'product') {
-            await confirmDeleteProduct()
-          } else if (deleteType === 'variant') {
-            await confirmDeleteVariant()
-          }
-        }}
-        itemName={itemToDelete?.name}
-        itemType={deleteType === 'product' ? 'product' : 'variant'}
-        description={
-          deleteType === 'product'
-            ? `Are you sure you want to delete "${itemToDelete?.name}"? This will also delete all variants and inventory associated with this product. This action cannot be undone.`
-            : `Are you sure you want to delete this variant? This will also delete related inventory. This action cannot be undone.`
-        }
-        isLoading={deleting}
-      />
     </div>
   )
 }
